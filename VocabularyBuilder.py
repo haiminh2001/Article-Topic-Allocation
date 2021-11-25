@@ -13,7 +13,7 @@ class VocabularyBuilder:
     self.learn = learn
     self.vocab_file = vocab_file
     if learn:
-        self.annotator: VnCoreNLP = VnCoreNLP(path + "/VnCoreNLP-1.1.1.jar", annotators="wseg, pos, ner", max_heap_size='-Xmx2g')
+        self.annotator: VnCoreNLP = VnCoreNLP(path + "/VnCoreNLP-1.1.1.jar", annotators="wseg", max_heap_size='-Xmx2g')
     
     #load learnt vocab
     with open(path + self.vocab_file) as input:
@@ -28,8 +28,6 @@ class VocabularyBuilder:
         #remove punctuation
         s = text.translate(str.maketrans('','', string.punctuation))
         words = self.annotator.tokenize(s)[0]
-        ner = self.annotator.ner(words)
-        print(ner)
         for word in words:
             if word not in self.vocab.keys():
                 self.vocab[word] = len(self.vocab)
