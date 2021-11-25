@@ -26,9 +26,10 @@ class VocabularyBuilder:
     assert self.learn
     for text in texts:
         #remove punctuation
-        s = text.translate(str.maketrans('','', string.punctuation))
-        words = self.annotator.tokenize(s)[0]
+        words = self.annotator.tokenize(text)[0]
         for word in words:
+            if word in string.punctuation:
+                continue
             if word not in self.vocab.keys():
                 self.vocab[word] = len(self.vocab)
     
