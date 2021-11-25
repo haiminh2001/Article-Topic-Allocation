@@ -16,9 +16,9 @@ class VocabularyBuilder:
         self.annotator: VnCoreNLP = VnCoreNLP(path + "/VnCoreNLP-1.1.1.jar", annotators="wseg", max_heap_size='-Xmx2g')
     
     #load learnt vocab
-    with open(path + self.vocab_file) as input:
+    with open(path + self.vocab_file, 'rb') as f:
         try:
-            self.vocab: dict =  pickle.load(input)
+            self.vocab: dict =  pickle.load(f)
         except:
             self.vocab: dict = {}
   
@@ -26,7 +26,7 @@ class VocabularyBuilder:
     assert self.learn
     for text in texts:
         #remove punctuation
-        words = self.annotator.tokenize(text)[0]
+        words = self.annotator.tokenize(text.lower())[0]
         for word in words:
             if word in string.punctuation:
                 continue
