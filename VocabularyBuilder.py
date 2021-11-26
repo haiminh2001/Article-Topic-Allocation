@@ -31,8 +31,8 @@ class VocabularyBuilder:
             for word in words:
                 if word in string.punctuation:
                     continue
-                if word not in self.vocab.keys():
-                    self.vocab[word] = len(self.vocab)
+                if word not in self.vocab.values():
+                    self.vocab[len(self.vocab)] = word
         
         with open(path + self.vocab_file, 'wb+') as f:
             pickle.dump(self.vocab, f)
