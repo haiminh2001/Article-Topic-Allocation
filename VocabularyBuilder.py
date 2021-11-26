@@ -3,7 +3,7 @@ from vncorenlp import VnCoreNLP
 import os
 import pickle
 import numpy as np
-
+from tqdm import tqdm
 path = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -16,6 +16,7 @@ class VocabularyBuilder:
             self.annotator: VnCoreNLP = VnCoreNLP(path + "/VnCoreNLP-1.1.1.jar", annotators="wseg", max_heap_size='-Xmx2g')
         
         #load learnt vocab
+        print('Loading learnt vocab')
         with open(path + self.vocab_file, 'rb') as f:
             try:
                 self.vocab: dict =  pickle.load(f)
@@ -24,7 +25,7 @@ class VocabularyBuilder:
     
     def fit(self, texts: list):
         assert self.learn
-        for text in texts:
+        for text in tqdm(texts, desc='Learning new vocabulary progess'):
             #remove punctuation
             words = self.annotator.tokenize(text.lower())[0]
             for word in words:
@@ -36,7 +37,16 @@ class VocabularyBuilder:
         with open(path + self.vocab_file, 'wb+') as f:
             pickle.dump(self.vocab, f)
 
-
+    def erase(self):
+        print('Warning: All of learnt vocabulary will be erased: y/n')
+        confirm = ''
+        while(confirm not in ['y', 'n']):
+            confirm = input()
+        if confirm == 'y':
+            open(path + self.vocab_file, 'w').close()
+            print('Erased!')
+                
+            
         
         
         
