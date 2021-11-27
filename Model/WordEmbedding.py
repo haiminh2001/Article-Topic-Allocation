@@ -3,10 +3,10 @@ from torch import nn
 import pytorch_lightning as pl
 from VocabularyBuilder import VocabularyBuilder
 from torch.nn.functional import normalize
-from TransformerLayers import PositionalEncoding, MultiHeadAttention
+from Model.TransformerLayers import PositionalEncoding, MultiHeadAttention
 from pytorch_lightning import Trainer
 from transformers import AdamW
-from DatatModule import EmbedDataset
+from Data.DatatModule import EmbedDataset
 from torch.nn import functional as F 
 from torch.utils.data import DataLoader
 import os
