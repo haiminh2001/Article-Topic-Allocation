@@ -78,4 +78,3 @@ class MultiHeadAttention(nn.Module):
         
         #combine output of heads
         return self.w0(value_tensor)
-

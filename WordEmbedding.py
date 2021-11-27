@@ -1,9 +1,16 @@
 import torch
 from torch import nn
 import pytorch_lightning as pl
-from torch.functional import norm
+from VocabularyBuilder import VocabularyBuilder
 from torch.nn.functional import normalize
 from TransformerLayers import PositionalEncoding, MultiHeadAttention
+from pytorch_lightning import Trainer
+from transformers import AdamW
+from torch.nn import functional as F 
+import os
+path = os.path.dirname(os.path.abspath(__file__))
+
+
 class Encoder(nn.Module):
     def __init__(self, vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1 ,**kwargs):
         super(Encoder, self).__init__()
@@ -53,4 +60,124 @@ class Encoder(nn.Module):
         
         return z2
 
+class Decoder(nn.Module):
+    def __init__(self,embedding_dim:int, sequence_length: int = 4, kernel_size: int = 3, dropout: float = 0.1, **kwargs):
+        super(Decoder, self).__init__()
+        buffer1 = int(embedding_dim / 2)
+        buffer2 = int(buffer1 / 2)
+        
+        #convo block 1
+        self.conv1d_1 = nn.Sequential(
+            nn.Conv1d(embedding_dim, buffer1 , kernel_size= 3, padding=1),
+            nn.BatchNorm1d(buffer1),
+            nn.Dropout(p= dropout),
+        )
+        
+        #convo block 2
+        self.conv1d_2 = nn.Sequential(
+            nn.Conv1d(buffer1, buffer2, kernel_size= 3, padding= 1),
+            nn.BatchNorm1d(buffer2),
+            nn.Dropout(p= dropout),
+        )
+        
+        #fully connected
+        buffer3 = int((buffer2 + buffer1) * sequence_length / 2)
+        self.fc = nn.Sequential(
+            nn.Linear((buffer2 + buffer1) * sequence_length, buffer3),
+            nn.Dropout(p= dropout),
+            nn.Linear(buffer3, embedding_dim),
+        )
+    
+    def forward(self, sequences: torch.Tensor) -> torch.Tensor:
+        """[summary]
 
+        Args:
+            sequences (torch.Tensor): [shape: [num_sequences, sequence_length, embedding_size]]
+
+        Returns:
+            torch.Tensor: [shape: [num_sequences, embeding_size]]
+        """
+        x = torch.transpose(sequences,1,2)
+        x = self.conv1d_1(x)
+        x1 = self.conv1d_2(x)
+        x2 = torch.cat((torch.flatten(x, start_dim= 1), torch.flatten(x1, start_dim= 1)), dim = 1)
+        x2 = self.fc(x2)
+        return x2
+    
+class WordEmbeddingModel(pl.LightningModule):
+    def __init__(self, vocab_length:int, embedding_dim: int = 200, num_heads:int = 3, window_size: int = 4, dropout: float= 0.1, lr: float= 1e-4, eps: float= 1e-5, **kwargs):
+        super(WordEmbeddingModel, self).__init__()
+        self.lr = lr
+        self.eps = eps
+        self.encode = Encoder(vocab_length= vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, sequence_length= 2 * window_size + 1, dropout= dropout)
+        self.decode = Decoder(embedding_dim= embedding_dim, sequence_length= 2 * window_size + 1, dropout= dropout)
+        
+    def forward(self, x):
+        out = self.encode(x)
+        out = self.decode(out)
+        return out
+    
+    def training_step(self, batch, batch_idx):
+        contexts, targets = batch
+        out = self.encode(contexts)
+        out = self.decode(out)
+        loss = F.mse_loss(out, targets)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        return {'loss': loss}
+    
+    def training_epoch_end(self, outputs):
+        avg_loss = torch.cat([output['loss'] for output in outputs]).detech()
+        avg_loss = torch.mean(avg_loss)
+        print('Epochs {}: loss: {}'.format(self.current_epoch, avg_loss))
+    
+    def configure_optimizers(self):
+        encode_optimizer = AdamW(
+            self.encode.parameters,
+            lr= self.lr,
+            eps=self.eps,
+        )
+        decode_optimizer = AdamW(
+            self.decode.parameters,
+            lr= self.lr,
+            eps=self.eps,
+        )
+        return encode_optimizer, decode_optimizer
+    
+class WordEmbedder():
+    def __init__(
+        self, 
+        vocab_builder: VocabularyBuilder = None, 
+        vocab_length: int = 20000, 
+        embedding_dim: int = 200, 
+        num_heads: int = 3, 
+        dropout: float = 0.1, 
+        lr: float = 1e-4,
+        eps: float = 1e-5, 
+        load_embedder: bool = True,
+        window_size: int = 3,
+        model_file: str = '/word_embedder.pickle', 
+        gpus: int = 1,
+        ):
+      
+        self.vocab_builder = vocab_builder
+
+        self.model_file = model_file
+        
+        self.setup_trainer(gpus)
+        
+        self.model = WordEmbeddingModel(vocab_length= vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps)
+        
+        if load_embedder:
+            self.load()
+            
+    def setup_trainer(self, gpus):
+        self.trainer = Trainer(gpus = gpus)
+    
+    def save(self):
+        torch.save(self.model, path + self.model_file)
+        print('Saved word embedder')
+    
+    def load(self):
+        print('Loading word embedder')
+        self.model = torch.load(path + self.model_file)
+        

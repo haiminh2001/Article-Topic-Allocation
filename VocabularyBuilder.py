@@ -31,7 +31,7 @@ class VocabularyBuilder:
             for word in words:
                 if word in string.punctuation:
                     continue
-                if word not in self.vocab.values():
+                if word not in self.vocab.values() or len(self.vocab) == 0:
                     self.vocab[len(self.vocab)] = word
         
         with open(path + self.vocab_file, 'wb+') as f:
