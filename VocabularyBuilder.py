@@ -2,8 +2,11 @@ import string
 from vncorenlp import VnCoreNLP
 import os
 import pickle
-import numpy as np
 from tqdm import tqdm
+import torch
+from torch.nn import functional as F
+
+
 path = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -32,7 +35,7 @@ class VocabularyBuilder:
                 if word in string.punctuation:
                     continue
                 if word not in self.vocab.values() or len(self.vocab) == 0:
-                    self.vocab[len(self.vocab)] = word
+                    self.vocab[word] = len(self.vocab)
         
         with open(path + self.vocab_file, 'wb+') as f:
             pickle.dump(self.vocab, f)
@@ -45,6 +48,15 @@ class VocabularyBuilder:
         if confirm == 'y':
             open(path + self.vocab_file, 'w').close()
             print('Erased!')
+            
+    def one_hot(self, word: str, dim: int = 20000):
+        if word in self.vocab.keys():
+            return F.one_hot (self.vocab[word], dim)
+        else:
+            return torch.zeros(dim)
+    
+    def tokenize(self, sequence: str):
+        return self.annotator.tokenize(sequence)
                 
             
         

@@ -6,7 +6,9 @@ from torch.nn.functional import normalize
 from TransformerLayers import PositionalEncoding, MultiHeadAttention
 from pytorch_lightning import Trainer
 from transformers import AdamW
+from DatatModule import EmbedDataset
 from torch.nn import functional as F 
+from torch.utils.data import DataLoader
 import os
 path = os.path.dirname(os.path.abspath(__file__))
 
@@ -117,6 +119,9 @@ class WordEmbeddingModel(pl.LightningModule):
         out = self.decode(out)
         return out
     
+    def embed(self, x):
+        return self.encode(x)
+    
     def training_step(self, batch, batch_idx):
         contexts, targets = batch
         out = self.encode(contexts)
@@ -158,9 +163,9 @@ class WordEmbedder():
         model_file: str = '/word_embedder.pickle', 
         gpus: int = 1,
         ):
-      
-        self.vocab_builder = vocab_builder
 
+        self.window_size = window_size
+        self.vocab_builder = vocab_builder
         self.model_file = model_file
         
         self.setup_trainer(gpus)
@@ -173,6 +178,20 @@ class WordEmbedder():
     def setup_trainer(self, gpus):
         self.trainer = Trainer(gpus = gpus)
     
+    def setup_data(self, texts: list, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True):
+        dataset = EmbedDataset(texts = texts, vocab_builder= self.vocab_builder, vocab_length= self.vocab_length, window_size= self.window_size)
+        self.data_loader = DataLoader(dataset= dataset, batch_size= batch_size, shuffle= True, pin_memory= pin_memory, num_workers= num_workers)
+    
+    def fit(self, texts: list, epochs: int = 20, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True):
+        #prepare data
+        self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory)
+        #fit
+        self.trainer.fit(
+            model= self.model,
+            train_dataloaders= self.data_loader,
+            max_epochs= epochs,
+        )
+    
     def save(self):
         torch.save(self.model, path + self.model_file)
         print('Saved word embedder')
@@ -180,4 +199,9 @@ class WordEmbedder():
     def load(self):
         print('Loading word embedder')
         self.model = torch.load(path + self.model_file)
-        
+    
+    def embed_vocab(self):
+        pass
+    
+    
+    
