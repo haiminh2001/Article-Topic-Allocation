@@ -14,11 +14,11 @@ path = os.path.dirname(os.path.abspath(__file__))
 
 
 class Encoder(nn.Module):
-    def __init__(self, vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1 ,**kwargs):
+    def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1 ,**kwargs):
         super(Encoder, self).__init__()
-        buffer = int((vocab_length + embedding_dim) / 2)
+        buffer = int((max_vocab_length + embedding_dim) / 2)
         self.dim_reduction = nn.Sequential(
-            nn.Linear(vocab_length, buffer),
+            nn.Linear(max_vocab_length, buffer),
             nn.ReLU(),
             nn.Dropout(p= dropout),
             nn.Linear(buffer, embedding_dim),
@@ -37,7 +37,7 @@ class Encoder(nn.Module):
         """[Encode words into vectors]
 
         Args:
-            x (torch.Tensor): [sequence of words, shape: [num_sequences, sequence_length, vocab_length]]
+            x (torch.Tensor): [sequence of words, shape: [num_sequences, sequence_length, max_vocab_length]]
 
         Returns:
             torch.Tensor: [sequence of vectors, shape: [num_sequences, sequence_length, embedding_dim]]
@@ -107,11 +107,11 @@ class Decoder(nn.Module):
         return x2
     
 class WordEmbeddingModel(pl.LightningModule):
-    def __init__(self, vocab_length:int, embedding_dim: int = 200, num_heads:int = 3, window_size: int = 4, dropout: float= 0.1, lr: float= 1e-4, eps: float= 1e-5, **kwargs):
+    def __init__(self, max_vocab_length:int, embedding_dim: int = 200, num_heads:int = 3, window_size: int = 4, dropout: float= 0.1, lr: float= 1e-4, eps: float= 1e-5, **kwargs):
         super(WordEmbeddingModel, self).__init__()
         self.lr = lr
         self.eps = eps
-        self.encode = Encoder(vocab_length= vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, sequence_length= 2 * window_size + 1, dropout= dropout)
+        self.encode = Encoder(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, sequence_length= 2 * window_size + 1, dropout= dropout)
         self.decode = Decoder(embedding_dim= embedding_dim, sequence_length= 2 * window_size + 1, dropout= dropout)
         
     def forward(self, x):
@@ -152,7 +152,7 @@ class WordEmbedder():
     def __init__(
         self, 
         vocab_builder: VocabularyBuilder = None, 
-        vocab_length: int = 20000, 
+        max_vocab_length: int = 20000, 
         embedding_dim: int = 200, 
         num_heads: int = 3, 
         dropout: float = 0.1, 
@@ -170,7 +170,7 @@ class WordEmbedder():
         
         self.setup_trainer(gpus)
         
-        self.model = WordEmbeddingModel(vocab_length= vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps)
+        self.model = WordEmbeddingModel(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps)
         
         if load_embedder:
             self.load()
@@ -179,7 +179,7 @@ class WordEmbedder():
         self.trainer = Trainer(gpus = gpus)
     
     def setup_data(self, texts: list, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True):
-        dataset = EmbedDataset(texts = texts, vocab_builder= self.vocab_builder, vocab_length= self.vocab_length, window_size= self.window_size)
+        dataset = EmbedDataset(texts = texts, vocab_builder= self.vocab_builder, max_vocab_length= self.max_vocab_length, window_size= self.window_size)
         self.data_loader = DataLoader(dataset= dataset, batch_size= batch_size, shuffle= True, pin_memory= pin_memory, num_workers= num_workers)
     
     def fit(self, texts: list, epochs: int = 20, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True):
