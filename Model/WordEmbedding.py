@@ -9,8 +9,8 @@ from transformers import AdamW
 from Data.DatatModule import EmbedDataset
 from torch.nn import functional as F 
 from torch.utils.data import DataLoader
-import os
-path = os.path.dirname(os.path.abspath(__file__))
+from os.path import dirname, abspath
+parent_path = dirname(dirname(abspath(__file__)))
 
 
 class Encoder(nn.Module):
@@ -160,7 +160,7 @@ class WordEmbedder():
         eps: float = 1e-5, 
         load_embedder: bool = True,
         window_size: int = 3,
-        model_file: str = '/word_embedder.pickle', 
+        model_file: str = '/Data/word_embedder.pickle', 
         gpus: int = 1,
         ):
 
@@ -193,12 +193,12 @@ class WordEmbedder():
         )
     
     def save(self):
-        torch.save(self.model, path + self.model_file)
+        torch.save(self.model, parent_path + self.model_file)
         print('Saved word embedder')
     
     def load(self):
         print('Loading word embedder')
-        self.model = torch.load(path + self.model_file)
+        self.model = torch.load(parent_path + self.model_file)
     
     def embed_vocab(self):
         pass
