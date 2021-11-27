@@ -11,7 +11,7 @@ path = os.path.dirname(os.path.abspath(__file__))
 
 
 class VocabularyBuilder:
-    def __init__(self, learn: bool= False, vocab_file: str = 'Tokenizer/vocabulary.pickle', **kwargs):
+    def __init__(self, learn: bool= False, vocab_file: str = '/Tokenizer/vocabulary.pickle', **kwargs):
         #learn new vocab or not
         self.learn = learn
         self.vocab_file = vocab_file
