@@ -162,7 +162,7 @@ class WordEmbedder():
         model_file: str = '/Data/word_embedder.pickle', 
         gpus: int = 1,
         ):
-
+        print(dir_path)
         self.window_size = window_size
         self.vocab_builder = vocab_builder
         self.model_file = model_file

@@ -1,2 +1,2 @@
 from .DatatModule import EmbedDataset
-from .VocabularyBuilder import VocabularyBuilder
+from .VocabularyBuilder import VocabBuilder
