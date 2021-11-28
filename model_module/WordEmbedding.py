@@ -1,12 +1,11 @@
 import torch
 from torch import nn
 import pytorch_lightning as pl
-from data_module import VocabularyBuilder
+from data_module import VocabularyBuilder, EmbedDataset
 from torch.nn.functional import normalize
 from TransformerLayers import PositionalEncoding, MultiHeadAttention
 from pytorch_lightning import Trainer
 from transformers import AdamW
-from data_module import EmbedDataset
 from torch.nn import functional as F 
 from torch.utils.data import DataLoader
 from os.path import dirname, abspath
