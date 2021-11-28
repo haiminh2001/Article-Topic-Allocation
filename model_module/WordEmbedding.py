@@ -6,7 +6,7 @@ from torch.nn.functional import normalize
 from TransformerLayers import PositionalEncoding, MultiHeadAttention
 from pytorch_lightning import Trainer
 from transformers import AdamW
-from Data.DatatModule import EmbedDataset
+from data_module import EmbedDataset
 from torch.nn import functional as F 
 from torch.utils.data import DataLoader
 from os.path import dirname, abspath
