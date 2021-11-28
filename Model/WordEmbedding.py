@@ -3,7 +3,7 @@ from torch import nn
 import pytorch_lightning as pl
 from VocabularyBuilder import VocabularyBuilder
 from torch.nn.functional import normalize
-from Model.TransformerLayers import PositionalEncoding, MultiHeadAttention
+from TransformerLayers import PositionalEncoding, MultiHeadAttention
 from pytorch_lightning import Trainer
 from transformers import AdamW
 from Data.DatatModule import EmbedDataset
@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from os.path import dirname, abspath
 parent_path = dirname(dirname(abspath(__file__)))
 
-
+print(parent_path)
 class Encoder(nn.Module):
     def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1 ,**kwargs):
         super(Encoder, self).__init__()
