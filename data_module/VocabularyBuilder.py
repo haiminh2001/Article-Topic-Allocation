@@ -5,10 +5,7 @@ import pickle
 from tqdm import tqdm
 import torch
 from torch.nn import functional as F
-
-
 path = os.path.dirname(os.path.abspath(__file__))
-
 
 class VocabularyBuilder:
     def __init__(self, learn: bool= False, vocab_file: str = '/Tokenizer/vocabulary.pickle', **kwargs):
