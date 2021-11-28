@@ -201,8 +201,6 @@ class WordEmbedder():
         print('Loading word embedder')
         self.model = torch.load(dir_path + self.model_file)
     
-    def embed_vocab(self):
-        pass
     
     
     
