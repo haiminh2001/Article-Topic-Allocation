@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import pytorch_lightning as pl
-from VocabularyBuilder import VocabularyBuilder
+from data_module import VocabularyBuilder
 from torch.nn.functional import normalize
 from TransformerLayers import PositionalEncoding, MultiHeadAttention
 from pytorch_lightning import Trainer
@@ -10,9 +10,9 @@ from data_module import EmbedDataset
 from torch.nn import functional as F 
 from torch.utils.data import DataLoader
 from os.path import dirname, abspath
-parent_path = dirname(dirname(abspath(__file__)))
+dir_path = dirname(dirname(abspath(__file__)))
 
-print(parent_path)
+print(dir_path)
 class Encoder(nn.Module):
     def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1 ,**kwargs):
         super(Encoder, self).__init__()
@@ -193,12 +193,12 @@ class WordEmbedder():
         )
     
     def save(self):
-        torch.save(self.model, parent_path + self.model_file)
+        torch.save(self.model, dir_path + self.model_file)
         print('Saved word embedder')
     
     def load(self):
         print('Loading word embedder')
-        self.model = torch.load(parent_path + self.model_file)
+        self.model = torch.load(dir_path + self.model_file)
     
     def embed_vocab(self):
         pass
