@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import Dataset
-from VocabularyBuilder import VocabBuilder
+from .VocabularyBuilder import VocabBuilder
 
 class EmbedDataset(Dataset):
     def __init__(self, texts: list, vocab_builder: VocabBuilder, max_vocab_length: int = 20000, window_size: int = 5):

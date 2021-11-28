@@ -3,7 +3,7 @@ from torch import nn
 import pytorch_lightning as pl
 from data_module import VocabularyBuilder, EmbedDataset
 from torch.nn.functional import normalize
-from TransformerLayers import PositionalEncoding, MultiHeadAttention
+from .TransformerLayers import PositionalEncoding, MultiHeadAttention
 from pytorch_lightning import Trainer
 from transformers import AdamW
 from torch.nn import functional as F 
@@ -11,7 +11,6 @@ from torch.utils.data import DataLoader
 from os.path import dirname, abspath
 dir_path = dirname(dirname(abspath(__file__)))
 
-print(dir_path)
 class Encoder(nn.Module):
     def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1 ,**kwargs):
         super(Encoder, self).__init__()
@@ -159,10 +158,9 @@ class WordEmbedder():
         eps: float = 1e-5, 
         load_embedder: bool = True,
         window_size: int = 3,
-        model_file: str = '/Data/word_embedder.pickle', 
+        model_file: str = '/data_module/word_embedder.pickle', 
         gpus: int = 1,
         ):
-        print(dir_path)
         self.window_size = window_size
         self.vocab_builder = vocab_builder
         self.model_file = model_file
@@ -172,7 +170,11 @@ class WordEmbedder():
         self.model = WordEmbeddingModel(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps)
         
         if load_embedder:
-            self.load()
+            try:
+                self.load()
+            except:
+                print('No embedder found')
+        
             
     def setup_trainer(self, gpus):
         self.trainer = Trainer(gpus = gpus)

@@ -1,3 +1,3 @@
-from DataModule import EmbedDataset
-from VocabularyBuilder import VocabBuilder
+from .DataModule import EmbedDataset
+from .VocabularyBuilder import VocabBuilder
 
