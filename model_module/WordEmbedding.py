@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import pytorch_lightning as pl
-from data_module import VocabularyBuilder, EmbedDataset
+from data_module import VocabBuilder, EmbedDataset
 from torch.nn.functional import normalize
 from .TransformerLayers import PositionalEncoding, MultiHeadAttention
 from pytorch_lightning import Trainer
@@ -9,6 +9,7 @@ from transformers import AdamW
 from torch.nn import functional as F 
 from torch.utils.data import DataLoader
 from os.path import dirname, abspath
+from tqdm import tqdm
 dir_path = dirname(dirname(abspath(__file__)))
 
 class Encoder(nn.Module):
@@ -149,7 +150,7 @@ class WordEmbeddingModel(pl.LightningModule):
 class WordEmbedder():
     def __init__(
         self, 
-        vocab_builder: VocabularyBuilder = None, 
+        vocab_builder: VocabBuilder = None, 
         max_vocab_length: int = 20000, 
         embedding_dim: int = 200, 
         num_heads: int = 3, 
@@ -179,13 +180,16 @@ class WordEmbedder():
     def setup_trainer(self, gpus):
         self.trainer = Trainer(gpus = gpus)
     
-    def setup_data(self, texts: list, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True):
-        dataset = EmbedDataset(texts = texts, vocab_builder= self.vocab_builder, max_vocab_length= self.max_vocab_length, window_size= self.window_size)
+    def setup_data(self, texts: list, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True, inference = False):
+        if inference:
+            pass
+        else:
+            dataset = EmbedDataset(texts = texts, vocab_builder= self.vocab_builder, max_vocab_length= self.max_vocab_length, window_size= self.window_size)
         self.data_loader = DataLoader(dataset= dataset, batch_size= batch_size, shuffle= True, pin_memory= pin_memory, num_workers= num_workers)
     
     def fit(self, texts: list, epochs: int = 20, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True):
         #prepare data
-        self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory)
+        self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference = True)
         #fit
         self.trainer.fit(
             model= self.model,
@@ -200,6 +204,23 @@ class WordEmbedder():
     def load(self):
         print('Loading word embedder')
         self.model = torch.load(dir_path + self.model_file)
+        
+    def embed(self, texts: list, batch_size: int = 512, num_workers: int = 4, pin_memory: bool = True) -> torch.Tensor:
+        """[embed input texts]
+
+        Args:
+            texts (list): [list of raw texts]
+
+        Returns:
+            torch.Tensor: [shape: [num_texts, num_sequences, embedding_dim]]
+        """
+        print('Embedding')
+        #prepare data
+        self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory)
+        
+        pass
+        
+            
     
     
     

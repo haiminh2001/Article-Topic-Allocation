@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import Dataset
 from .VocabularyBuilder import VocabBuilder
+from tqdm import tqdm
 
 class EmbedDataset(Dataset):
     def __init__(self, texts: list, vocab_builder: VocabBuilder, max_vocab_length: int = 20000, window_size: int = 5):
@@ -12,7 +13,8 @@ class EmbedDataset(Dataset):
         self.max_vocab_length = max_vocab_length
         self.contexts = []
         self.targets = []
-        for text in texts:
+        print('One hot encoding...')
+        for text in tqdm(texts):
             #tokenize
             words = self.vocab_builder.tokenize(text)
             
