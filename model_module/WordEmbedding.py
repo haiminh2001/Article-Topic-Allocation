@@ -235,8 +235,4 @@ class WordEmbedder():
         return ClassifierInputDataset(words, self.text_ends)
         
         
-            
-    
-    
-    
     
