@@ -1,3 +1,3 @@
-from .DataModule import EmbedDataset
+from .DataModule import EmbedDataset, InferenceDataset, ClassifierInputDataset
 from .VocabularyBuilder import VocabBuilder
 
