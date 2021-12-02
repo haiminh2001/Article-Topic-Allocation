@@ -32,17 +32,19 @@ class Encoder(nn.Module):
             nn.Dropout(p= dropout),
         )
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, x0: torch.Tensor) -> torch.Tensor:
         """[Encode words into vectors]
 
         Args:
-            x (torch.Tensor): [sequence of words, shape: [num_sequences, sequence_length, max_vocab_length]]
+            x (torch.Tensor): [sequence of words, shape: [num_sequences, max_vocab_length]]
+            x0 (torch.Tensor): [context words, shape: [num_sequences, max_vocab_length]]
 
         Returns:
             torch.Tensor: [sequence of vectors, shape: [num_sequences, sequence_length, embedding_dim]]
         """
         #dim reduction
         x1 = self.dim_reduction(x)
+        x01 = self.dim_reduction(x0) 
         
         #add positional encoding
         x1 = self.pe(x1)
@@ -51,59 +53,57 @@ class Encoder(nn.Module):
         z1 = self.mha(x1)
 
         #add and normalize
-        z1 = normalize(z1 + x1, dim= 2)
+        z1 = normalize(z1 + x1, dim= 1)
         
         #feadforwad
         z2 = self.fc(z1)
         
         #add and normalize
-        z2 = normalize(z2 + z1, dim= 2)
+        z2 = normalize(z2 + z1 + x01, dim= 1)
         
         return z2
 
 class Decoder(nn.Module):
-    def __init__(self,embedding_dim:int, sequence_length: int = 4, kernel_size: int = 3, dropout: float = 0.1, **kwargs):
+    def __init__(self,vocab_length:int, embedding_dim:int, sequence_length: int = 4, kernel_size: int = 3, dropout: float = 0.1, **kwargs):
         super(Decoder, self).__init__()
-        buffer1 = int(embedding_dim / 2)
-        buffer2 = int(buffer1 / 2)
+        buffer1 = embedding_dim * 2
+        buffer2 = buffer1 * 2
         
         #convo block 1
-        self.conv1d_1 = nn.Sequential(
-            nn.Conv1d(embedding_dim, buffer1 , kernel_size= 3, padding=1),
-            nn.BatchNorm1d(buffer1),
+        self.fc_1 = nn.Sequential(
+            nn.Linear(embedding_dim, buffer1),
+            nn.ReLU(),
             nn.Dropout(p= dropout),
         )
         
         #convo block 2
-        self.conv1d_2 = nn.Sequential(
-            nn.Conv1d(buffer1, buffer2, kernel_size= 3, padding= 1),
-            nn.BatchNorm1d(buffer2),
+        self.fc_2 = nn.Sequential(
+            nn.Linear(buffer1, buffer2),
+            nn.ReLU(),
             nn.Dropout(p= dropout),
         )
         
         #fully connected
-        buffer3 = int((buffer2 + buffer1) * sequence_length / 2)
-        self.fc = nn.Sequential(
-            nn.Linear((buffer2 + buffer1) * sequence_length, buffer3),
-            nn.Dropout(p= dropout),
-            nn.Linear(buffer3, embedding_dim),
+        buffer3 = int((buffer2 + vocab_length)  / 2)
+        self.fc_3 = nn.Sequential(
+            nn.Linear(buffer3, vocab_length),
+            nn.ReLU(),
+            nn.Dropout(p= dropout),            
         )
     
-    def forward(self, sequences: torch.Tensor) -> torch.Tensor:
+    def forward(self, encoded: torch.Tensor) -> torch.Tensor:
         """[summary]
 
         Args:
-            sequences (torch.Tensor): [shape: [num_sequences, sequence_length, embedding_size]]
+            sequences (torch.Tensor): [shape: [num_sequences, embedding_size]]
 
         Returns:
-            torch.Tensor: [shape: [num_sequences, embeding_size]]
+            torch.Tensor: [shape: [num_sequences, vocab_length]]
         """
-        x = torch.transpose(sequences,1,2)
-        x = self.conv1d_1(x)
-        x1 = self.conv1d_2(x)
-        x2 = torch.cat((torch.flatten(x, start_dim= 1), torch.flatten(x1, start_dim= 1)), dim = 1)
-        x2 = self.fc(x2)
-        return x2
+        out = self.fc_1(encoded)
+        out = self.fc_2(out)
+        out = self.fc_3(out)
+        return out
     
 class WordEmbeddingModel(pl.LightningModule):
     def __init__(self, max_vocab_length:int, embedding_dim: int = 200, num_heads:int = 3, window_size: int = 4, dropout: float= 0.1, lr: float= 1e-4, eps: float= 1e-5, **kwargs):
@@ -123,7 +123,7 @@ class WordEmbeddingModel(pl.LightningModule):
     
     def training_step(self, batch, batch_idx):
         contexts, targets = batch
-        out = self.encode(contexts)
+        out = self.encode(contexts, targets)
         out = self.decode(out)
         loss = F.mse_loss(out, targets)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
