@@ -64,7 +64,7 @@ class Encoder(nn.Module):
         return z2
 
 class Decoder(nn.Module):
-    def __init__(self,vocab_length:int, embedding_dim:int, sequence_length: int = 4, kernel_size: int = 3, dropout: float = 0.1, **kwargs):
+    def __init__(self,vocab_length:int, embedding_dim:int, dropout: float = 0.1, **kwargs):
         super(Decoder, self).__init__()
         buffer1 = embedding_dim * 2
         buffer2 = buffer1 * 2
