@@ -55,6 +55,7 @@ class InferenceDataset(Dataset):
         self.vocab_builder = vocab_builder
         self.max_vocab_length = max_vocab_length
         self.contexts = []
+        self.targets = []
         #the ends of texts
         self.text_ends = [0]
         end = 0
@@ -68,12 +69,17 @@ class InferenceDataset(Dataset):
             for i in range (window_size, n - window_size):
                 end = min(i + window_size, n - 1)
                 self.contexts.append(self.transform(words[i - window_size : end]))
+                self.targets.append(self.vocab_builder.one_hot(words[i], self.max_vocab_length))
+                
+        #transform into tensors
+        self.contexts = torch.stack(self.contexts)
+        self.targets = torch.stack(self.targets)     
         
     def __len__(self):
         return self.contexts.shape[0]
     
     def __getitem__(self, index):
-        return self.contexts[index]
+        return self.contexts[index], self.targets[index]
     
     def transform(self, words: list):       
         #transform into BOW form

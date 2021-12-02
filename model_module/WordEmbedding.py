@@ -118,8 +118,8 @@ class WordEmbeddingModel(pl.LightningModule):
         out = self.decode(out)
         return out
     
-    def embed(self, x):
-        return self.encode(x)
+    def embed(self, x: torch.Tensor, x0: torch.Tensor):
+        return self.encode(x, x0)
     
     def training_step(self, batch, batch_idx):
         contexts, targets = batch
@@ -192,7 +192,7 @@ class WordEmbedder():
     
     def fit(self, texts: list, epochs: int = 20, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True):
         #prepare data
-        self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference = True)
+        self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory)
         #fit
         self.trainer.fit(
             model= self.model,
@@ -224,9 +224,9 @@ class WordEmbedder():
         
         #embed
         print('Embedding')
-        for words in tqdm(self.data_loader):
+        for contexts, targets in tqdm(self.data_loader):
             #words is a matrix representing a bunch of words, with each row corresponds to a word
-            words.append(self.model.embed(words))
+            words.append(self.model.embed(contexts, targets))
             
         #concatenate into a tensor
         words = torch.cat(self.words)
