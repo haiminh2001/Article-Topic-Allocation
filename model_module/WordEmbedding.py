@@ -5,7 +5,7 @@ from data_module import VocabBuilder, EmbedDataset, InferenceDataset, Classifier
 from torch.nn.functional import normalize
 from .TransformerLayers import PositionalEncoding, MultiHeadAttention
 from pytorch_lightning import Trainer
-from transformers import AdamW
+from torch.optim import Adam
 from torch.nn import functional as F 
 from torch.utils.data import DataLoader, Dataset
 from os.path import dirname, abspath
@@ -135,12 +135,12 @@ class WordEmbeddingModel(pl.LightningModule):
         print('Epochs {}: loss: {}'.format(self.current_epoch, avg_loss))
     
     def configure_optimizers(self):
-        encode_optimizer = AdamW(
+        encode_optimizer = Adam(
             self.encode.parameters,
             lr= self.lr,
             eps=self.eps,
         )
-        decode_optimizer = AdamW(
+        decode_optimizer = Adam(
             self.decode.parameters,
             lr= self.lr,
             eps=self.eps,
