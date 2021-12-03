@@ -178,7 +178,7 @@ class WordEmbedder():
         
             
     def setup_trainer(self, gpus):
-        self.trainer = Trainer(gpus = gpus)
+        self.trainer = Trainer(gpus = gpus, default_root_dir= dir_path + "/data_module/checkpoints")
     
     def setup_data(self, texts: list, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True, inference = False):
         if inference:
