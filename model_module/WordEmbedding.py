@@ -159,26 +159,25 @@ class WordEmbedder():
         eps: float = 1e-5, 
         load_embedder: bool = True,
         window_size: int = 3,
-        model_file: str = '/data_module/word_embedder.pickle', 
+        model_file: str = '/data_module/word_embedder.cpkt', 
         gpus: int = 1,
         ):
         self.window_size = window_size
         self.vocab_builder = vocab_builder
         self.model_file = model_file
-        
         self.setup_trainer(gpus)
-        
-        self.model = WordEmbeddingModel(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps)
         
         if load_embedder:
             try:
                 self.load()
             except:
                 print('No embedder found')
-        
+                self.model = WordEmbeddingModel(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps)
+        else:
+            self.model = WordEmbeddingModel(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps)
             
     def setup_trainer(self, gpus):
-        self.trainer = Trainer(gpus = gpus, default_root_dir= dir_path + "/data_module/checkpoints")
+        self.trainer = Trainer(gpus = gpus, default_root_dir= dir_path + self.model_file)
     
     def setup_data(self, texts: list, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True, inference = False):
         if inference:
@@ -199,14 +198,15 @@ class WordEmbedder():
             train_dataloaders= self.data_loader,
             max_epochs= epochs,
         )
+        self.save()
     
     def save(self):
-        torch.save(self.model, dir_path + self.model_file)
+        self.trainer.save_checkpoint(dir_path + self.model_file)
         print('Saved word embedder')
     
     def load(self):
         print('Loading word embedder')
-        self.model = torch.load(dir_path + self.model_file)
+        self.model =  WordEmbeddingModel.load_from_checkpoint(dir_path + self.model_file)
         
     def embed(self, texts: list, batch_size: int = 512, num_workers: int = 4, pin_memory: bool = True) -> Dataset:
         """[embed input texts]
