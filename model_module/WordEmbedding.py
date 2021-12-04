@@ -64,7 +64,7 @@ class Encoder(nn.Module):
         return z2
 
 class Decoder(nn.Module):
-    def __init__(self,vocab_length:int, embedding_dim:int, dropout: float = 0.1, **kwargs):
+    def __init__(self,max_vocab_length:int, embedding_dim:int, dropout: float = 0.1, **kwargs):
         super(Decoder, self).__init__()
         buffer1 = embedding_dim * 2
         buffer2 = buffer1 * 2
@@ -84,9 +84,9 @@ class Decoder(nn.Module):
         )
         
         #fully connected
-        buffer3 = int((buffer2 + vocab_length)  / 2)
+        buffer3 = int((buffer2 + max_vocab_length)  / 2)
         self.fc_3 = nn.Sequential(
-            nn.Linear(buffer3, vocab_length),
+            nn.Linear(buffer3, max_vocab_length),
             nn.ReLU(),
             nn.Dropout(p= dropout),            
         )
@@ -98,7 +98,7 @@ class Decoder(nn.Module):
             sequences (torch.Tensor): [shape: [num_sequences, embedding_size]]
 
         Returns:
-            torch.Tensor: [shape: [num_sequences, vocab_length]]
+            torch.Tensor: [shape: [num_sequences, max_vocab_length]]
         """
         out = self.fc_1(encoded)
         out = self.fc_2(out)
@@ -111,7 +111,7 @@ class WordEmbeddingModel(pl.LightningModule):
         self.lr = lr
         self.eps = eps
         self.encode = Encoder(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, sequence_length= 2 * window_size + 1, dropout= dropout)
-        self.decode = Decoder(embedding_dim= embedding_dim, sequence_length= 2 * window_size + 1, dropout= dropout)
+        self.decode = Decoder(embedding_dim= embedding_dim, sequence_length= 2 * window_size + 1, dropout= dropout, max_vocab_length= max_vocab_length)
         
     def forward(self, x):
         out = self.encode(x)
@@ -199,6 +199,9 @@ class WordEmbedder():
             max_epochs= epochs,
         )
         self.save()
+    
+    def load_vocab_builder(self, vocab_builder: VocabBuilder):
+        self.vocab_builder = vocab_builder
     
     def save(self):
         self.trainer.save_checkpoint(dir_path + self.model_file)
