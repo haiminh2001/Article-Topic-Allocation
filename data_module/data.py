@@ -1,6 +1,7 @@
 from abc import ABC
 import pandas as pd
 import os
+from tqdm import tqdm
 path = os.path.dirname(os.path.abspath(__file__))
 class DataHolder(ABC):
     def __init__(self, data_folder: str = '/articles_csv'):
@@ -10,7 +11,8 @@ class DataHolder(ABC):
     def read_csv(self):
         self.data = {'texts': [], 'labels': []}
         self.data = pd.DataFrame(self.data)
-        for file in os.listdir(self.data_folder):
+        print('Loading data...')
+        for file in tqdm(os.listdir(self.data_folder)):
             if file.endswith('.csv'):
                 df = pd.read_csv(self.data_folder + '/' +  file)
                 texts = df.iloc[: , 1 ]

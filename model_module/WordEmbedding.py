@@ -167,7 +167,7 @@ class WordEmbedder():
         self.model_file = model_file
         self.max_vocab_length = max_vocab_length
         self.setup_trainer(gpus)
-        
+        print('Setting up model...')
         if load_embedder:
             try:
                 self.load()
