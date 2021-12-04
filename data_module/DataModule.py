@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import Dataset
 from .VocabularyBuilder import VocabBuilder
+import string
 from tqdm import tqdm
 
 class EmbedDataset(Dataset):
@@ -16,8 +17,12 @@ class EmbedDataset(Dataset):
         print('One hot encoding...')
         for text in tqdm(texts):
             #tokenize
-            words = self.vocab_builder.tokenize(text)
-            
+            wordz = self.vocab_builder.tokenize(text)
+            words = []
+            for word in wordz:
+                for w in word:
+                    if w not in string.punctuation:
+                        words.append(w)
             for i in range (window_size, len(words) - window_size):
                 end = min(i + window_size, len(words) -1)
                 self.contexts.append(self.transform(words[i - window_size : end]))
@@ -37,7 +42,7 @@ class EmbedDataset(Dataset):
     def transform(self, words: list):       
         #transform into BOW form
         one_hots = [self.vocab_builder.one_hot(word, self.max_vocab_length) for word in words]
-        one_hots = torch.mean(one_hots)
+        one_hots = torch.mean(torch.cat(one_hots), dim= 0)
         return one_hots
     
                 
@@ -83,10 +88,7 @@ class InferenceDataset(Dataset):
     
     def transform(self, words: list):       
         #transform into BOW form
-        try:
-            one_hots = [self.vocab_builder.one_hot(word, self.max_vocab_length) for word in words]
-        except:
-            print(words)
+        one_hots = [self.vocab_builder.one_hot(word, self.max_vocab_length) for word in words]
         one_hots = torch.mean(one_hots)
         return one_hots
     

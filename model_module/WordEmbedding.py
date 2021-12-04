@@ -162,7 +162,6 @@ class WordEmbedder():
         model_file: str = '/data_module/word_embedder.cpkt', 
         gpus: int = 1,
         ):
-        print('Setting up model...')
         self.window_size = window_size
         self.vocab_builder = vocab_builder
         self.model_file = model_file

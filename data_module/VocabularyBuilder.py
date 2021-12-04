@@ -48,8 +48,12 @@ class VocabBuilder:
         if word in self.vocab.keys():
             i = self.vocab[word]
             if i < max_vocab_length:
-                return F.one_hot (i, max_vocab_length)
-        
+                try:
+                    return F.one_hot (i, max_vocab_length)
+                except:
+                    one_hot = torch.zeros(max_vocab_length)
+                    one_hot[int(i)] = 1
+                    return one_hot
         return torch.zeros(max_vocab_length)
     
     def tokenize(self, sequence: str):
