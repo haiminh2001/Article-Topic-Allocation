@@ -8,12 +8,9 @@ from torch.nn import functional as F
 path = os.path.dirname(os.path.abspath(__file__))
 
 class VocabBuilder:
-    def __init__(self, learn: bool= False, vocab_file: str = '/Tokenizer/vocabulary.pickle', **kwargs):
-        #learn new vocab or not
-        self.learn = learn
+    def __init__(self, vocab_file: str = '/Tokenizer/vocabulary.pickle', **kwargs):
         self.vocab_file = vocab_file
-        if learn:
-            self.annotator: VnCoreNLP = VnCoreNLP(path + "/Tokenizer/VnCoreNLP-1.1.1.jar", annotators="wseg", max_heap_size='-Xmx2g')
+        self.annotator: VnCoreNLP = VnCoreNLP(path + "/Tokenizer/VnCoreNLP-1.1.1.jar", annotators="wseg", max_heap_size='-Xmx2g')
         
         #load learnt vocab
         print('Loading learnt vocab')
@@ -24,7 +21,7 @@ class VocabBuilder:
                 self.vocab: dict = {}
     
     def fit(self, texts: list):
-        assert self.learn
+   
         for text in tqdm(texts, desc='Learning new vocabulary progess'):
             #remove punctuation
             words = self.annotator.tokenize(text.lower())[0]
