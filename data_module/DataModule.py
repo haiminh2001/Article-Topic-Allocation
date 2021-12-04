@@ -83,7 +83,10 @@ class InferenceDataset(Dataset):
     
     def transform(self, words: list):       
         #transform into BOW form
-        one_hots = [self.vocab_builder.one_hot(word, self.max_vocab_length) for word in words]
+        try:
+            one_hots = [self.vocab_builder.one_hot(word, self.max_vocab_length) for word in words]
+        except:
+            print(words)
         one_hots = torch.mean(one_hots)
         return one_hots
     
