@@ -3,7 +3,7 @@ import torch
 from torch.utils.data import Dataset
 from .VocabularyBuilder import VocabBuilder
 import string
-
+from tqdm import tqdm
 
 class EmbedDataset(Dataset):
     def __init__(self,dataset_splits: int, split_index: int, texts: list, vocab_builder: VocabBuilder, max_vocab_length: int = 20000, window_size: int = 5):
@@ -20,8 +20,8 @@ class EmbedDataset(Dataset):
         end = len(texts) if len(texts) <  end  else end 
         texts = texts[start : end]
         print('One hot encoding...')
-        for i, text in enumerate(texts):
-            print('Dataset: {i}/{dataset_splits}')
+        print(f'Dataset: {self.count}/{dataset_splits}')
+        for text in tqdm(texts):
             #tokenize
             wordz = self.vocab_builder.tokenize(text)
             words = []
@@ -75,8 +75,8 @@ class InferenceDataset(Dataset):
         self.text_ends = [0]
         end = 0
         print('One hot encoding...')
-        for i, text in enumerate(texts):
-            print('Dataset: {i}/{dataset_splits}')
+        print(f'Dataset: {self.count}/{dataset_splits}')
+        for text in tqdm(texts):
             #tokenize
             words = self.vocab_builder.tokenize(text)
             n = len(words)
