@@ -135,17 +135,23 @@ class WordEmbeddingModel(pl.LightningModule):
         print('Epochs {}: loss: {}'.format(self.current_epoch, avg_loss))
     
     def configure_optimizers(self):
-        encode_optimizer = Adam(
-            self.encode.parameters,
-            lr= self.lr,
-            eps=self.eps,
+        
+        optimizer_grouped_parameters = [
+            {
+                "params": p
+                    for n, p in self.encode.named_parameters()
+            },
+            {
+                "params": p
+                    for n, p in self.decode.named_parameters()
+            },
+        ]
+        optimizer = Adam(
+            optimizer_grouped_parameters,
+            lr=self.hparams.learning_rate,
+            eps=self.hparams.epsilon,
         )
-        decode_optimizer = Adam(
-            self.decode.parameters,
-            lr= self.lr,
-            eps=self.eps,
-        )
-        return encode_optimizer, decode_optimizer
+        return optimizer
     
 class WordEmbedder():
     def __init__(
