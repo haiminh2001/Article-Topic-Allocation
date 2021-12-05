@@ -149,7 +149,7 @@ class WordEmbeddingModel(pl.LightningModule):
         optimizer = Adam(
             optimizer_grouped_parameters,
             lr= self.lr,
-            eps= self.epsi,
+            eps= self.eps,
         )
         return optimizer
     
@@ -183,7 +183,7 @@ class WordEmbedder():
             self.model = WordEmbeddingModel(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps)
             
     def setup_trainer(self, gpus, epochs):
-        self.trainer = Trainer(gpus = gpus, default_root_dir= dir_path + self.model_file, max_epochs= epochs)
+        self.trainer = Trainer(gpus = gpus, max_epochs= epochs)
     
     def setup_data(self, split_index: int, texts: list, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True, inference = False, dataset_splits: int = 10):
         self.count +=1
@@ -206,10 +206,17 @@ class WordEmbedder():
             #prepare data
             self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, dataset_splits= dataset_splits, split_index= self.count)
             #fit
-            self.trainer.fit(
-                model= self.model,
-                train_dataloaders= self.data_loader,
-            )
+            if i == 0:
+                self.trainer.fit(
+                    model= self.model,
+                    train_dataloaders= self.data_loader,
+                )
+            else:
+                self.trainer.fit(
+                    model= self.model,
+                    train_dataloaders= self.data_loader,
+                    weights_summary = False,
+                )
             del self.data_loader
             self.save()
     

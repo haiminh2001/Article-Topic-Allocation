@@ -19,6 +19,7 @@ class VocabBuilder:
                 self.vocab: dict =  pickle.load(f)
             except:
                 self.vocab: dict = {}
+        print(f'Have learnt {len(self.vocab)} words')
     
     def fit(self, texts: list):
    

@@ -49,7 +49,7 @@ class EmbedDataset(Dataset):
     def transform(self, words: list):       
         #transform into BOW form
         one_hots = [self.vocab_builder.one_hot(word, self.max_vocab_length) for word in words]
-        one_hots = torch.mean(torch.cat(one_hots), dim= 0)
+        one_hots = torch.mean(torch.stack(one_hots), dim= 0)
         return one_hots
     
                 
@@ -101,7 +101,7 @@ class InferenceDataset(Dataset):
     def transform(self, words: list):       
         #transform into BOW form
         one_hots = [self.vocab_builder.one_hot(word, self.max_vocab_length) for word in words]
-        one_hots = torch.mean(one_hots)
+        one_hots = torch.mean(torch.stack(one_hots), dim= 0)
         return one_hots
     
     def get_text_ends(self):
