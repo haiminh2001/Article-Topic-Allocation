@@ -1,3 +1,4 @@
+from posixpath import split
 import torch
 from torch.utils.data import Dataset
 from .VocabularyBuilder import VocabBuilder
@@ -5,7 +6,7 @@ import string
 from tqdm import tqdm
 
 class EmbedDataset(Dataset):
-    def __init__(self, texts: list, vocab_builder: VocabBuilder, max_vocab_length: int = 20000, window_size: int = 5):
+    def __init__(self,dataset_split: int, split_index: int, texts: list, vocab_builder: VocabBuilder, max_vocab_length: int = 20000, window_size: int = 5):
         """
         [Prepare data for training word embedder]
         """
@@ -14,6 +15,10 @@ class EmbedDataset(Dataset):
         self.max_vocab_length = max_vocab_length
         self.contexts = []
         self.targets = []
+        start = int(len(texts) / dataset_split) * split_index
+        end = start + int(len(texts) / dataset_split) + 1
+        end = len(texts) if len(texts) <  end  else end 
+        texts = texts[start : end]
         print('One hot encoding...')
         for text in tqdm(texts):
             #tokenize
@@ -47,7 +52,7 @@ class EmbedDataset(Dataset):
     
                 
 class InferenceDataset(Dataset):
-    def __init__(self, texts: list, vocab_builder: VocabBuilder, max_vocab_length: int = 20000, window_size: int = 5):
+    def __init__(self,texts: list, vocab_builder: VocabBuilder, max_vocab_length: int = 20000, window_size: int = 5, dataset_split:int = 10, split_index: int = 0):
         """[prepare data for embedding before training classifier]
 
         Args:
@@ -61,6 +66,10 @@ class InferenceDataset(Dataset):
         self.max_vocab_length = max_vocab_length
         self.contexts = []
         self.targets = []
+        start = int(len(texts) / dataset_split) * split_index
+        end = start + int(len(texts) / dataset_split) + 1
+        end = len(texts) if len(texts) <  end  else end 
+        texts = texts[start : end]
         #the ends of texts
         self.text_ends = [0]
         end = 0
