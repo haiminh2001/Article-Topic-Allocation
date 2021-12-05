@@ -198,7 +198,7 @@ class WordEmbedder():
 
         for i in tqdm(range(dataset_splits)):
             #prepare data
-            self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, dataset_splits= dataset_splits, split_index= i)
+            self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, dataset_splits= dataset_splits, split_index= self.count)
             #fit
             self.trainer.fit(
                 model= self.model,
@@ -231,7 +231,7 @@ class WordEmbedder():
         
         #prepare data
         self.count = 0
-        self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference= True)
+        self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference= True, split_index= self.count)
         words = []
         
         #embed

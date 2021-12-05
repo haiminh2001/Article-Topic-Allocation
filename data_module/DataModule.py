@@ -15,12 +15,12 @@ class EmbedDataset(Dataset):
         self.max_vocab_length = max_vocab_length
         self.contexts = []
         self.targets = []
-        start = int(len(texts) / dataset_splits) * split_index
+        start = int(len(texts) / dataset_splits) * (split_index - 1)
         end = start + int(len(texts) / dataset_splits) + 1
         end = len(texts) if len(texts) <  end  else end 
         texts = texts[start : end]
         print('One hot encoding...')
-        print(f'Dataset: {self.count}/{dataset_splits}')
+        print(f'Dataset: {split_index}/{dataset_splits}')
         for text in tqdm(texts):
             #tokenize
             wordz = self.vocab_builder.tokenize(text)
@@ -75,7 +75,7 @@ class InferenceDataset(Dataset):
         self.text_ends = [0]
         end = 0
         print('One hot encoding...')
-        print(f'Dataset: {self.count}/{dataset_splits}')
+        print(f'Dataset: {split_index}/{dataset_splits}')
         for text in tqdm(texts):
             #tokenize
             words = self.vocab_builder.tokenize(text)
