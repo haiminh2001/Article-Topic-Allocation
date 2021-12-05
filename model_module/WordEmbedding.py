@@ -148,8 +148,8 @@ class WordEmbeddingModel(pl.LightningModule):
         ]
         optimizer = Adam(
             optimizer_grouped_parameters,
-            lr=self.hparams.learning_rate,
-            eps=self.hparams.epsilon,
+            lr= self.lr,
+            eps= self.epsi,
         )
         return optimizer
     
