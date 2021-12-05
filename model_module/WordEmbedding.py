@@ -180,19 +180,22 @@ class WordEmbedder():
         self.trainer = Trainer(gpus = gpus, default_root_dir= dir_path + self.model_file)
     
     def setup_data(self, split_index: int, texts: list, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True, inference = False, dataset_split: int = 10):
+        self.count +=1
         if inference:
             dataset = InferenceDataset(split_index= split_index, dataset_split = dataset_split, texts = texts, vocab_builder= self.vocab_builder, max_vocab_length= self.max_vocab_length, window_size= self.window_size)
             self.data_loader = DataLoader(dataset= dataset, batch_size= batch_size, shuffle= False, pin_memory= pin_memory, num_workers= num_workers)
-            del dataset
             self.text_ends = dataset.get_text_ends
         else:
             dataset = EmbedDataset(split_index= split_index, dataset_split= dataset_split, texts = texts, vocab_builder= self.vocab_builder, max_vocab_length= self.max_vocab_length, window_size= self.window_size)
-            del dataset
             self.data_loader = DataLoader(dataset= dataset, batch_size= batch_size, shuffle= True, pin_memory= pin_memory, num_workers= num_workers)
         
+        if self.count == dataset_split:
+            del dataset
     
     def fit(self, texts: list, epochs: int = 20, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True, 
             dataset_split: int = 10):
+        self.count = 0
+
         for i in tqdm(range(dataset_split)):
             #prepare data
             self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, dataset_split= dataset_split, split_index= i)
@@ -227,6 +230,7 @@ class WordEmbedder():
         """
         
         #prepare data
+        self.count = 0
         self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference= True)
         words = []
         
