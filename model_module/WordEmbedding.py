@@ -166,7 +166,7 @@ class WordEmbedder():
         self.vocab_builder = vocab_builder
         self.model_file = model_file
         self.max_vocab_length = max_vocab_length
-        self.setup_trainer(gpus)
+        self.gpus = gpus
         if load_embedder:
             try:
                 self.load()
@@ -176,8 +176,8 @@ class WordEmbedder():
         else:
             self.model = WordEmbeddingModel(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps)
             
-    def setup_trainer(self, gpus):
-        self.trainer = Trainer(gpus = gpus, default_root_dir= dir_path + self.model_file)
+    def setup_trainer(self, gpus, epochs):
+        self.trainer = Trainer(gpus = gpus, default_root_dir= dir_path + self.model_file, max_epochs= epochs)
     
     def setup_data(self, split_index: int, texts: list, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True, inference = False, dataset_splits: int = 10):
         self.count +=1
@@ -195,15 +195,14 @@ class WordEmbedder():
     def fit(self, texts: list, epochs: int = 20, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True, 
             dataset_splits: int = 10):
         self.count = 0
-
-        for i in tqdm(range(dataset_splits)):
+        self.setup_trainer(gpus= self.gpus, epochs = epochs)
+        for i in range(dataset_splits):
             #prepare data
             self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, dataset_splits= dataset_splits, split_index= self.count)
             #fit
             self.trainer.fit(
                 model= self.model,
                 train_dataloaders= self.data_loader,
-                max_epochs= epochs,
             )
             del self.data_loader
             self.save()

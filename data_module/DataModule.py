@@ -1,3 +1,4 @@
+from datetime import time
 from posixpath import split
 import torch
 from torch.utils.data import Dataset
@@ -11,16 +12,16 @@ class EmbedDataset(Dataset):
         [Prepare data for training word embedder]
         """
         super(EmbedDataset, self).__init__()
+        print('One hot encoding...')
+        print(f'Dataset: {split_index + 1}/{dataset_splits}')
         self.vocab_builder = vocab_builder
         self.max_vocab_length = max_vocab_length
         self.contexts = []
         self.targets = []
-        start = int(len(texts) / dataset_splits) * (split_index - 1)
+        start = int(len(texts) / dataset_splits) * split_index
         end = start + int(len(texts) / dataset_splits) + 1
         end = len(texts) if len(texts) <  end  else end 
         texts = texts[start : end]
-        print('One hot encoding...')
-        print(f'Dataset: {split_index}/{dataset_splits}')
         for text in tqdm(texts):
             #tokenize
             wordz = self.vocab_builder.tokenize(text)
@@ -63,6 +64,8 @@ class InferenceDataset(Dataset):
             window_size (int, optional): [the number of context words each side]. Defaults to 5.
         """
         super(InferenceDataset, self,).__init__()
+        print('One hot encoding...')
+        print(f'Dataset: {split_index + 1}/{dataset_splits}')
         self.vocab_builder = vocab_builder
         self.max_vocab_length = max_vocab_length
         self.contexts = []
@@ -74,8 +77,6 @@ class InferenceDataset(Dataset):
         #the ends of texts
         self.text_ends = [0]
         end = 0
-        print('One hot encoding...')
-        print(f'Dataset: {split_index}/{dataset_splits}')
         for text in tqdm(texts):
             #tokenize
             words = self.vocab_builder.tokenize(text)
