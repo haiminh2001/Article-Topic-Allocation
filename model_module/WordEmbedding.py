@@ -10,7 +10,8 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset
 from os.path import dirname, abspath
 from tqdm import tqdm
-import numpy as np
+from torchsummary import summary
+
 dir_path = dirname(dirname(abspath(__file__)))
 
 class Encoder(nn.Module):
@@ -112,7 +113,7 @@ class WordEmbeddingModel(pl.LightningModule):
         self.decode = Decoder(embedding_dim= embedding_dim, sequence_length= 2 * window_size + 1, dropout= dropout, max_vocab_length= max_vocab_length)
         
     def forward(self, x: torch.Tensor, x0:torch.Tensor):
-        out = self.encode()
+        out = self.encode(x, x0)
         out = self.decode(out)
         return out
     
@@ -181,7 +182,7 @@ class WordEmbedder():
             self.model = WordEmbeddingModel(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps)
             
     def setup_trainer(self, gpus, epochs):
-        self.trainer = Trainer(gpus = gpus, max_epochs= epochs)
+        self.trainer = Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None)
     
     def setup_data(self, split_index: int, texts: list, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True, inference = False, dataset_splits: int = 10):
         self.count +=1
@@ -205,16 +206,12 @@ class WordEmbedder():
             self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, dataset_splits= dataset_splits, split_index= self.count)
             #fit
             if i == 0:
-                self.trainer.fit(
-                    model= self.model,
-                    train_dataloaders= self.data_loader,
-                )
-            else:
-                self.trainer.fit(
-                    model= self.model,
-                    train_dataloaders= self.data_loader,
-                    weights_summary = False,
-                )
+                summary(self.model.cuda(), input_size=[(batch_size, self.max_vocab_length), (batch_size, self.window_size * 2 + 1, self.max_vocab_length)])
+        
+            self.trainer.fit(
+                model= self.model,
+                train_dataloaders= self.data_loader,
+            )
             del self.data_loader
             self.save()
     
