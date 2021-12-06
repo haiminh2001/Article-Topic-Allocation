@@ -201,13 +201,10 @@ class WordEmbedder():
             dataset_splits: int = 10):
         self.count = 0
         self.setup_trainer(gpus= self.gpus, epochs = epochs)
-        for i in range(dataset_splits):
+        for _ in range(dataset_splits):
             #prepare data
             self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, dataset_splits= dataset_splits, split_index= self.count)
-            #fit
-            if i == 0:
-                summary(self.model.cuda(), input_size=[(batch_size, self.max_vocab_length), (batch_size, self.window_size * 2 + 1, self.max_vocab_length)])
-        
+            #fit        
             self.trainer.fit(
                 model= self.model,
                 train_dataloaders= self.data_loader,

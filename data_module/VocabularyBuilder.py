@@ -10,7 +10,7 @@ path = os.path.dirname(os.path.abspath(__file__))
 class VocabBuilder:
     def __init__(self, vocab_file: str = '/Tokenizer/vocabulary.pickle', **kwargs):
         self.vocab_file = vocab_file
-        print('Loading learnt vocab')
+        print('Loading learnt vocab...')
         self.annotator: VnCoreNLP = VnCoreNLP(path + "/Tokenizer/VnCoreNLP-1.1.1.jar", annotators="wseg", max_heap_size='-Xmx2g')
         
         #load learnt vocab
