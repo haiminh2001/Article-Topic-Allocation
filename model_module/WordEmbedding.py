@@ -38,6 +38,9 @@ class Encoder(nn.Module):
             nn.ReLU(),
             nn.Dropout(p= dropout),
         )
+        
+    def one_hot_dim_reduction(self, one_hot: torch.Tensor):
+        return self.dim_reduction(one_hot)
     
     def forward(self, x: torch.Tensor, x0: torch.Tensor) -> torch.Tensor:
         """[Encode words into vectors]
@@ -119,6 +122,9 @@ class WordEmbeddingModel(pl.LightningModule):
     
     def embed(self, x: torch.Tensor, x0: torch.Tensor):
         return self.encode(x, x0)
+    
+    def one_hot_dim_reduction(self, one_hot: torch.Tensor):
+        return self.encode.one_hot_dim_reduction(one_hot= one_hot)
     
     def training_step(self, batch, batch_idx):
         contexts, targets = batch
@@ -211,6 +217,9 @@ class WordEmbedder():
             )
             del self.data_loader
             self.save()
+            
+    def one_hot_dim_reduction(self, one_hot: torch.Tensor):
+        return self.model.one_hot_dim_reduction(one_hot= one_hot)
     
     def load_vocab_builder(self, vocab_builder: VocabBuilder):
         self.vocab_builder = vocab_builder
