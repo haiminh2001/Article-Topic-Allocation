@@ -31,12 +31,14 @@ class EmbedDataset(Dataset):
                     if w not in string.punctuation:
                         words.append(w)
             for i in range (window_size, len(words) - window_size):
-                end = min(i + window_size, len(words) -1)
+                end = min(i + window_size + 1, len(words))
                 self.contexts.append(self.transform(words[i - window_size : end]))
                 self.targets.append(self.vocab_builder.one_hot(words[i], self.max_vocab_length))
 
         #transform into tensors
         self.contexts = torch.stack(self.contexts)
+        if self.contexts.shape[0] < window_size * 2 + 1:
+            self.contexts = torch.cat(self.contexts, torch.zeros(window_size * 2 + 1 - self.contexts.shape[0], self.contexts.shape[1], self.contexts.shape[2]))
         self.targets = torch.stack(self.targets)                
 
         
@@ -49,7 +51,7 @@ class EmbedDataset(Dataset):
     def transform(self, words: list):       
         #transform into BOW form
         one_hots = [self.vocab_builder.one_hot(word, self.max_vocab_length) for word in words]
-        one_hots = torch.mean(torch.stack(one_hots), dim= 0)
+        one_hots = torch.stack(one_hots)
         return one_hots
     
                 

@@ -1,6 +1,5 @@
 import torch
 from torch import nn
-import pytorch_lightning as pl
 import math
 
 class PositionalEncoding(nn.Module):
@@ -57,7 +56,7 @@ class MultiHeadAttention(nn.Module):
             sequence (torch.Tensor): [shape: [batch_size, sequence_length, embedding_dim]]
 
         Returns:
-            torch.Tensor: [shape: [batch_size, sequence_length * num_heads, embedding_dim]]
+            torch.Tensor: [shape: [batch_size, sequence_length, embedding_dim]]
         """
        
         Qs = torch.stack([wq(sequence) for wq in self.wq])

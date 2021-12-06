@@ -10,6 +10,7 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset
 from os.path import dirname, abspath
 from tqdm import tqdm
+import numpy as np
 dir_path = dirname(dirname(abspath(__file__)))
 
 class Encoder(nn.Module):
@@ -31,26 +32,34 @@ class Encoder(nn.Module):
             nn.ReLU(),
             nn.Dropout(p= dropout),
         )
+        self.combine = nn.Sequential(
+            nn.Linear(sequence_length, 1),
+            nn.ReLU(),
+            nn.Dropout(p= dropout),
+        )
     
     def forward(self, x: torch.Tensor, x0: torch.Tensor) -> torch.Tensor:
         """[Encode words into vectors]
 
         Args:
             x (torch.Tensor): [sequence of words, shape: [num_sequences, max_vocab_length]]
-            x0 (torch.Tensor): [context words, shape: [num_sequences, max_vocab_length]]
+            x0 (torch.Tensor): [context words, shape: [num_sequences, sequence_length, max_vocab_length]]
 
         Returns:
-            torch.Tensor: [sequence of vectors, shape: [num_sequences, sequence_length, embedding_dim]]
+            torch.Tensor: [sequence of vectors, shape: [num_sequences, embedding_dim]]
         """
         #dim reduction
         x1 = self.dim_reduction(x)
         x01 = self.dim_reduction(x0) 
         
         #add positional encoding
-        x1 = self.pe(x1)
-        
+        x01 = self.pe(x01)
+
         #multihead attention
-        z1 = self.mha(x1)
+        z1 = self.mha(x01)
+        
+        #combine all context words into 1 vector
+        z1 = self.combine(torch.transpose(z1, 1, 2)).squeeze()
 
         #add and normalize
         z1 = normalize(z1 + x1, dim= 1)
@@ -59,7 +68,7 @@ class Encoder(nn.Module):
         z2 = self.fc(z1)
         
         #add and normalize
-        z2 = normalize(z2 + z1 + x01, dim= 1)
+        z2 = normalize(z2 + z1 + x1, dim= 1)
         
         return z2
 
@@ -67,29 +76,20 @@ class Decoder(nn.Module):
     def __init__(self,max_vocab_length:int, embedding_dim:int, dropout: float = 0.1, **kwargs):
         super(Decoder, self).__init__()
         buffer1 = embedding_dim * 2
-        buffer2 = buffer1 * 2
-        
-        #convo block 1
-        self.fc_1 = nn.Sequential(
+        buffer2 = int((buffer1 + max_vocab_length)  / 2)
+        #fc
+        self.fc = nn.Sequential(
             nn.Linear(embedding_dim, buffer1),
             nn.ReLU(),
             nn.Dropout(p= dropout),
-        )
-        
-        #convo block 2
-        self.fc_2 = nn.Sequential(
             nn.Linear(buffer1, buffer2),
             nn.ReLU(),
             nn.Dropout(p= dropout),
-        )
-        
-        #fully connected
-        buffer3 = int((buffer2 + max_vocab_length)  / 2)
-        self.fc_3 = nn.Sequential(
-            nn.Linear(buffer3, max_vocab_length),
+            nn.Linear(buffer2, max_vocab_length),
             nn.ReLU(),
-            nn.Dropout(p= dropout),            
+            nn.Dropout(p= dropout), 
         )
+
     
     def forward(self, encoded: torch.Tensor) -> torch.Tensor:
         """[summary]
@@ -100,10 +100,8 @@ class Decoder(nn.Module):
         Returns:
             torch.Tensor: [shape: [num_sequences, max_vocab_length]]
         """
-        out = self.fc_1(encoded)
-        out = self.fc_2(out)
-        out = self.fc_3(out)
-        return out
+        
+        return self.fc(encoded)
     
 class WordEmbeddingModel(pl.LightningModule):
     def __init__(self, max_vocab_length:int, embedding_dim: int = 200, num_heads:int = 3, window_size: int = 4, dropout: float= 0.1, lr: float= 1e-4, eps: float= 1e-5, **kwargs):
@@ -113,8 +111,8 @@ class WordEmbeddingModel(pl.LightningModule):
         self.encode = Encoder(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, sequence_length= 2 * window_size + 1, dropout= dropout)
         self.decode = Decoder(embedding_dim= embedding_dim, sequence_length= 2 * window_size + 1, dropout= dropout, max_vocab_length= max_vocab_length)
         
-    def forward(self, x):
-        out = self.encode(x)
+    def forward(self, x: torch.Tensor, x0:torch.Tensor):
+        out = self.encode()
         out = self.decode(out)
         return out
     
@@ -123,15 +121,15 @@ class WordEmbeddingModel(pl.LightningModule):
     
     def training_step(self, batch, batch_idx):
         contexts, targets = batch
-        out = self.encode(contexts, targets)
+        out = self.encode(targets, contexts)
         out = self.decode(out)
-        loss = F.mse_loss(out, targets)
+        #cross entropy since out put is in one hot form
+        loss = F.cross_entropy(out, targets)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return {'loss': loss}
     
     def training_epoch_end(self, outputs):
-        avg_loss = torch.cat([output['loss'] for output in outputs]).detech()
-        avg_loss = torch.mean(avg_loss)
+        avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
         print('Epochs {}: loss: {}'.format(self.current_epoch, avg_loss))
     
     def configure_optimizers(self):
