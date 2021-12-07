@@ -1,3 +1,4 @@
+
 import torch
 from torch import nn
 import pytorch_lightning as pl
@@ -10,15 +11,22 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset
 from os.path import dirname, abspath
 from tqdm import tqdm
-from torchsummary import summary
 
 dir_path = dirname(dirname(abspath(__file__)))
 
 class Encoder(nn.Module):
-    def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1 ,**kwargs):
+    def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1, hide_target_rate: float = 0.5  ,**kwargs):
         super(Encoder, self).__init__()
         buffer = int((max_vocab_length + embedding_dim) / 2)
-        self.dim_reduction = nn.Sequential(
+        self.contexts_dim_reduction = nn.Sequential(
+            nn.Linear(max_vocab_length, buffer),
+            nn.ReLU(),
+            nn.Dropout(p= dropout),
+            nn.Linear(buffer, embedding_dim),
+            nn.ReLU(),
+            nn.Dropout(p= dropout),
+        )
+        self.targets_dim_reduction = nn.Sequential(
             nn.Linear(max_vocab_length, buffer),
             nn.ReLU(),
             nn.Dropout(p= dropout),
@@ -38,6 +46,15 @@ class Encoder(nn.Module):
             nn.ReLU(),
             nn.Dropout(p= dropout),
         )
+        self.hide_target_rate = hide_target_rate
+        self.save_hide_target_rate = hide_target_rate
+        
+    def eval_mode(self):
+        self.hide_target_rate = 0
+    
+    def train_mode(self):
+        self.hide_target_rate = self.save_hide_target_rate
+    
         
     def one_hot_dim_reduction(self, one_hot: torch.Tensor):
         return self.dim_reduction(one_hot)
@@ -53,8 +70,14 @@ class Encoder(nn.Module):
             torch.Tensor: [sequence of vectors, shape: [num_sequences, embedding_dim]]
         """
         #dim reduction
-        x1 = self.dim_reduction(x)
-        x01 = self.dim_reduction(x0) 
+        x01 = self.contexts_dim_reduction(x0) 
+        
+        #hide target or not
+        hide = torch.rand(1)[0]
+        if (hide < self.hide_target_rate):
+            x1 = torch.zeros(x.shape[0], x01.shape[-1]).cuda()
+        else:
+            x1 = self.targets_dim_reduction(x)
         
         #add positional encoding
         x01 = self.pe(x01)
@@ -108,13 +131,19 @@ class Decoder(nn.Module):
         return self.fc(encoded)
     
 class WordEmbeddingModel(pl.LightningModule):
-    def __init__(self, max_vocab_length:int, embedding_dim: int = 200, num_heads:int = 3, window_size: int = 4, dropout: float= 0.1, lr: float= 1e-4, eps: float= 1e-5, **kwargs):
+    def __init__(self, max_vocab_length:int, embedding_dim: int = 200, num_heads:int = 3, window_size: int = 4, dropout: float= 0.1, lr: float= 1e-4, eps: float= 1e-5, hide_target_rate: float = 0.5, **kwargs):
         super(WordEmbeddingModel, self).__init__()
         self.lr = lr
         self.eps = eps
-        self.encode = Encoder(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, sequence_length= 2 * window_size + 1, dropout= dropout)
+        self.encode = Encoder(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, sequence_length= 2 * window_size + 1, dropout= dropout, hide_target_rate = hide_target_rate)
         self.decode = Decoder(embedding_dim= embedding_dim, sequence_length= 2 * window_size + 1, dropout= dropout, max_vocab_length= max_vocab_length)
+    
+    def eval_mode(self):
+        self.encode.eval_mode()
         
+    def train_mode(self):
+        self.encode.train_mode()
+    
     def forward(self, x: torch.Tensor, x0:torch.Tensor):
         out = self.encode(x, x0)
         out = self.decode(out)
@@ -138,17 +167,24 @@ class WordEmbeddingModel(pl.LightningModule):
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
         print('Epochs {}: loss: {}'.format(self.current_epoch, avg_loss))
+        
+    @property
+    def num_params(self):
+        encode_params = sum(p.numel() for p in self.encode.parameters() if p.requires_grad)
+        decode_params = sum(p.numel() for p in self.decode.parameters() if p.requires_grad)
+        total_params = encode_params + decode_params
+        return encode_params, decode_params, total_params
     
     def configure_optimizers(self):
         
         optimizer_grouped_parameters = [
             {
                 "params": p
-                    for n, p in self.encode.named_parameters()
+                    for p in self.encode.parameters()
             },
             {
                 "params": p
-                    for n, p in self.decode.named_parameters()
+                    for p in self.decode.parameters()
             },
         ]
         optimizer = Adam(
@@ -172,23 +208,42 @@ class WordEmbedder():
         window_size: int = 3,
         model_file: str = '/data_module/word_embedder.cpkt', 
         gpus: int = 1,
+        hide_target_rate: float = 0.5,
         ):
         self.window_size = window_size
         self.vocab_builder = vocab_builder
         self.model_file = model_file
         self.max_vocab_length = max_vocab_length
-        self.gpus = gpus
+        try:
+            self.gpus = gpus
+        except:
+            print('Require at least 1 gpu!')
+            return
+            
         if load_embedder:
             try:
                 self.load()
             except:
                 print('No embedder found')
-                self.model = WordEmbeddingModel(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps)
+                self.model = WordEmbeddingModel(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps, hide_target_rate= hide_target_rate)
         else:
-            self.model = WordEmbeddingModel(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps)
-            
+            self.model = WordEmbeddingModel(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps, hide_target_rate= hide_target_rate)
+
+        print(self)
+        
+        
+    def __str__(self) -> str:
+        encode_params, decode_params, total = self.model.num_params
+        info = 'Weights summary\n==========================================\n'
+        info += f'Encoder: {encode_params}\n'
+        info += f'Decoder: {decode_params}\n'
+        info += '==========================================\n'
+        info += f'Total: {total}'
+        return info
+    
+        
     def setup_trainer(self, gpus, epochs):
-        self.trainer = Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None)
+        self.trainer = Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None, log_every_n_steps= 5)
     
     def setup_data(self, split_index: int, texts: list, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True, inference = False, dataset_splits: int = 10):
         self.count +=1
@@ -206,8 +261,11 @@ class WordEmbedder():
     def fit(self, texts: list, epochs: int = 20, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True, 
             dataset_splits: int = 10):
         self.count = 0
+        #turn on train mode
+        self.model.train_mode()
         self.setup_trainer(gpus= self.gpus, epochs = epochs)
-        for _ in range(dataset_splits):
+        for i in range(dataset_splits):
+            
             #prepare data
             self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, dataset_splits= dataset_splits, split_index= self.count)
             #fit        
@@ -216,7 +274,8 @@ class WordEmbedder():
                 train_dataloaders= self.data_loader,
             )
             del self.data_loader
-            self.save()
+            if (i + 1) % int(dataset_splits / 10) == 0 or i + 1 == dataset_splits:
+                self.save()
             
     def one_hot_dim_reduction(self, one_hot: torch.Tensor):
         return self.model.one_hot_dim_reduction(one_hot= one_hot)
@@ -246,6 +305,9 @@ class WordEmbedder():
         self.count = 0
         self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference= True, split_index= self.count)
         words = []
+        
+        #turn on eval mode
+        self.model.eval_mode()
         
         #embed
         print('Embedding')
