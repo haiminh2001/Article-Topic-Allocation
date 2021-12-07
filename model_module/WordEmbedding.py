@@ -287,7 +287,7 @@ class WordEmbedder():
                 train_dataloaders= self.data_loader,
             )
             t = time.time()
-            print(f'Finish dataset {i + 1}, total time: {t - s}, time per epoch: {(t - s) / epochs}')
+            print(f'Finished dataset {i + 1}, total time: {t - s}, time per epoch: {(t - s) / epochs}')
             del self.data_loader
             self.save()
             
