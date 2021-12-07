@@ -20,7 +20,7 @@ dir_path = dirname(dirname(abspath(__file__)))
 class Encoder(nn.Module):
     def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1, hide_target_rate: float = 0.5  ,**kwargs):
         super(Encoder, self).__init__()
-        buffer = int((max_vocab_length + embedding_dim) / 2)
+        buffer = max(int((max_vocab_length + embedding_dim) / 20), 1000)
         self.contexts_dim_reduction = nn.Sequential(
             nn.Linear(max_vocab_length, buffer),
             nn.ReLU(),
@@ -105,8 +105,8 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
     def __init__(self,max_vocab_length:int, embedding_dim:int, dropout: float = 0.1, **kwargs):
         super(Decoder, self).__init__()
-        buffer1 = embedding_dim * 2
-        buffer2 = int((buffer1 + max_vocab_length)  / 2)
+        buffer1 = min(embedding_dim * 5, 1000)
+        buffer2 = int((buffer1 * 5 + max_vocab_length)  / 6)
         #fc
         self.fc = nn.Sequential(
             nn.Linear(embedding_dim, buffer1),
