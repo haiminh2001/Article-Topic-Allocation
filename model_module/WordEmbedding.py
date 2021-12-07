@@ -58,6 +58,9 @@ class Encoder(nn.Module):
     def train_mode(self):
         self.hide_target_rate = self.save_hide_target_rate
     
+    @property
+    def dim_params(self):
+        dim_reduction = sum(p.numel() for p in self.contexts_dim_reduction.parameters() if p.requires_grad) + sum(p.numel() for p in self.targets_dim_reduction.parameters() if p.requires_grad)
         
     def one_hot_dim_reduction(self, one_hot: torch.Tensor):
         return self.dim_reduction(one_hot)
@@ -176,10 +179,11 @@ class WordEmbeddingModel(pl.LightningModule):
         
     @property
     def num_params(self):
-        encode_params = sum(p.numel() for p in self.encode.parameters() if p.requires_grad)
+        dim_params = self.encode.dim_params
+        encode_params = sum(p.numel() for p in self.encode.parameters() if p.requires_grad) - dim_params
         decode_params = sum(p.numel() for p in self.decode.parameters() if p.requires_grad)
         total_params = encode_params + decode_params
-        return encode_params, decode_params, total_params
+        return dim_params, encode_params, decode_params, total_params
     
     def configure_optimizers(self):
         
@@ -239,12 +243,14 @@ class WordEmbedder():
         
         
     def __str__(self) -> str:
-        encode_params, decode_params, total = self.model.num_params
+        dim_params, encode_params, decode_params, total = self.model.num_params
         info = 'Weights summary\n==========================================\n'
+        info += f'Dimension reduction: {(dim_params / 1e6):.1f} M\n'
         info += f'Encoder: {(encode_params / 1e6):.1f} M\n'
         info += f'Decoder: {(decode_params / 1e6):.1f} M\n'
         info += '==========================================\n'
-        info += f'Total: {(total /1e6):.1f} M'
+        info += f'Total: {(total /1e6):.1f} M\n'
+        info += f'Actual params used for embedding: {(encode_params / 1e6):.1f}'
         return info
     
         
