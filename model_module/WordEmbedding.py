@@ -11,8 +11,11 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset
 from os.path import dirname, abspath
 from tqdm import tqdm
+import time
 
 dir_path = dirname(dirname(abspath(__file__)))
+
+        
 
 class Encoder(nn.Module):
     def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1, hide_target_rate: float = 0.5  ,**kwargs):
@@ -137,6 +140,7 @@ class WordEmbeddingModel(pl.LightningModule):
         self.eps = eps
         self.encode = Encoder(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, sequence_length= 2 * window_size + 1, dropout= dropout, hide_target_rate = hide_target_rate)
         self.decode = Decoder(embedding_dim= embedding_dim, sequence_length= 2 * window_size + 1, dropout= dropout, max_vocab_length= max_vocab_length)
+        self.max_vocab_length = max_vocab_length
     
     def eval_mode(self):
         self.encode.eval_mode()
@@ -157,6 +161,8 @@ class WordEmbeddingModel(pl.LightningModule):
     
     def training_step(self, batch, batch_idx):
         contexts, targets = batch
+        contexts = F.one_hot(contexts, self.max_vocab_length).type(torch.float).squeeze()
+        targets = F.one_hot(targets, self.max_vocab_length).type(torch.float).squeeze()
         out = self.encode(targets, contexts)
         out = self.decode(out)
         #cross entropy since out put is in one hot form
@@ -235,10 +241,10 @@ class WordEmbedder():
     def __str__(self) -> str:
         encode_params, decode_params, total = self.model.num_params
         info = 'Weights summary\n==========================================\n'
-        info += f'Encoder: {encode_params}\n'
-        info += f'Decoder: {decode_params}\n'
+        info += f'Encoder: {(encode_params / 1e6):.1f} M\n'
+        info += f'Decoder: {(decode_params / 1e6):.1f} M\n'
         info += '==========================================\n'
-        info += f'Total: {total}'
+        info += f'Total: {(total /1e6):.1f} M'
         return info
     
         
@@ -265,7 +271,7 @@ class WordEmbedder():
         self.model.train_mode()
         self.setup_trainer(gpus= self.gpus, epochs = epochs)
         for i in range(dataset_splits):
-            
+            s = time.time()
             #prepare data
             self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, dataset_splits= dataset_splits, split_index= self.count)
             #fit        
@@ -273,6 +279,8 @@ class WordEmbedder():
                 model= self.model,
                 train_dataloaders= self.data_loader,
             )
+            t = time.time()
+            print(f'Finish dataset {i + 1}, time: {t - s}')
             del self.data_loader
             if (i + 1) % int(dataset_splits / 10) == 0 or i + 1 == dataset_splits:
                 self.save()

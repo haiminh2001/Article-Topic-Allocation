@@ -44,18 +44,22 @@ class VocabBuilder:
             open(path + self.vocab_file, 'w').close()
             print('Erased!')
             
-    def one_hot(self, word: str, max_vocab_length: int = 20000):
+    def one_hot(self, word: str, max_vocab_length: int = 20000, return_one_hot = True):
         #only take max_vocab_length word
-        if word in self.vocab.keys():
-            i = self.vocab[word]
-            if i < max_vocab_length:
-                try:
-                    return F.one_hot (i, max_vocab_length)
-                except:
-                    one_hot = torch.zeros(max_vocab_length)
-                    one_hot[int(i)] = 1
-                    return one_hot
-        return torch.zeros(max_vocab_length)
+        if return_one_hot:
+            i = self.vocab.get(word)
+            if i != None:
+                i = self.vocab[word]
+                if i < max_vocab_length:
+                    return F.one_hot(torch.tensor([i]).type(torch.long), max_vocab_length).squeeze().type(torch.float)
+               
+            return torch.zeros(max_vocab_length).type(torch.float)
+        else:
+            i = self.vocab.get(word)
+            if i != None:
+                if i < max_vocab_length:
+                    return torch.Tensor([i]).type(torch.long)
+            return torch.zeros(1).type(torch.long)
     
     def tokenize(self, sequence: str):
         return self.annotator.tokenize(sequence)

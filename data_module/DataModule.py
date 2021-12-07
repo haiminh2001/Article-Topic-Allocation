@@ -1,5 +1,4 @@
-from datetime import time
-from posixpath import split
+
 import torch
 from torch.utils.data import Dataset
 from .VocabularyBuilder import VocabBuilder
@@ -33,7 +32,7 @@ class EmbedDataset(Dataset):
             for i in range (window_size, len(words) - window_size):
                 end = min(i + window_size + 1, len(words))
                 self.contexts.append(self.transform(words[i - window_size : end]))
-                self.targets.append(self.vocab_builder.one_hot(words[i], self.max_vocab_length))
+                self.targets.append(self.vocab_builder.one_hot(words[i], self.max_vocab_length, return_one_hot= False))
 
         #transform into tensors
         self.contexts = torch.stack(self.contexts)
@@ -50,7 +49,7 @@ class EmbedDataset(Dataset):
     
     def transform(self, words: list):       
         #transform into BOW form
-        one_hots = [self.vocab_builder.one_hot(word, self.max_vocab_length) for word in words]
+        one_hots = [self.vocab_builder.one_hot(word, self.max_vocab_length, return_one_hot= False) for word in words]
         one_hots = torch.stack(one_hots)
         return one_hots
     
@@ -88,7 +87,7 @@ class InferenceDataset(Dataset):
             for i in range (window_size, n - window_size):
                 end = min(i + window_size, n - 1)
                 self.contexts.append(self.transform(words[i - window_size : end]))
-                self.targets.append(self.vocab_builder.one_hot(words[i], self.max_vocab_length))
+                self.targets.append(self.vocab_builder.one_hot(words[i], self.max_vocab_length, return_one_hot= True))
                 
         #transform into tensors
         self.contexts = torch.stack(self.contexts)
@@ -100,10 +99,10 @@ class InferenceDataset(Dataset):
     def __getitem__(self, index):
         return self.contexts[index], self.targets[index]
     
-    def transform(self, words: list):       
+    def transform(self, words: list, return_one_hot: bool):       
         #transform into BOW form
-        one_hots = [self.vocab_builder.one_hot(word, self.max_vocab_length) for word in words]
-        one_hots = torch.mean(torch.stack(one_hots), dim= 0)
+        one_hots = [self.vocab_builder.one_hot(word, self.max_vocab_length, return_one_hot= True) for word in words]
+        one_hots = torch.stack(one_hots)
         return one_hots
     
     def get_text_ends(self):
