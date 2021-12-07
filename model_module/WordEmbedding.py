@@ -289,8 +289,7 @@ class WordEmbedder():
             t = time.time()
             print(f'Finish dataset {i + 1}, total time: {t - s}, time per epoch: {(t - s) / epochs}')
             del self.data_loader
-            if (i + 1) % int(dataset_splits / 10) == 0 or i + 1 == dataset_splits:
-                self.save()
+            self.save()
             
     def one_hot_dim_reduction(self, one_hot: torch.Tensor):
         return self.model.one_hot_dim_reduction(one_hot= one_hot)
