@@ -217,7 +217,7 @@ class WordEmbedder():
         eps: float = 1e-5, 
         load_embedder: bool = True,
         window_size: int = 3,
-        model_file: str = '/data_module/word_embedder.cpkt', 
+        model_file: str = '/data_module/word_embedder.ckpt', 
         gpus: int = 1,
         hide_target_rate: float = 0.5,
         ):
