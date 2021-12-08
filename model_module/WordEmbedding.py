@@ -17,7 +17,7 @@ import pickle
 
 dir_path = dirname(dirname(abspath(__file__)))
 hprams_file= '/data_module/word_embedder_hprams.pickle'
-model_file= 'https://drive.google.com/file/d/1FB8kXdg51Op9lr9HzBz7tX9-huN49NRw/view?usp=sharing'
+model_file= '/data_module/word_embedder.ckpt'
 
 class Encoder(nn.Module):
     def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1, hide_target_rate: float = 0.5  ,**kwargs):
@@ -300,7 +300,7 @@ class WordEmbedder():
     
     def save(self):
         #save network
-        self.trainer.save_checkpoint(model_file)
+        self.trainer.save_checkpoint(model_file, weights_only= True)
         if self.hprams:
             #save model hprams
             with open(dir_path + hprams_file, 'wb') as f:
