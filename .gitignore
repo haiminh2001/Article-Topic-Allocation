@@ -142,3 +142,5 @@ tempCodeRunnerFile.py
 
 #too large
 word_embedder.ckpt
+
+lightning_logs/
