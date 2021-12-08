@@ -230,6 +230,7 @@ class WordEmbedder():
                 self.load()
             self.vocab_builder = vocab_builder
             self.gpus = gpus
+            self.hprams = None
             
         else:
             self.model = WordEmbeddingModel(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps, hide_target_rate= hide_target_rate)
