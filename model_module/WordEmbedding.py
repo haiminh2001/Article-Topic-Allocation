@@ -1,9 +1,10 @@
 
+from ssl import DER_cert_to_PEM_cert
 import torch
 from torch import nn
 import pytorch_lightning as pl
 from data_module import VocabBuilder, EmbedDataset, InferenceDataset, ClassifierInputDataset
-from torch.nn.functional import normalize
+from torch.nn.functional import dropout, embedding, normalize
 from .TransformerLayers import PositionalEncoding, MultiHeadAttention
 from pytorch_lightning import Trainer
 from torch.optim import Adam
@@ -12,10 +13,11 @@ from torch.utils.data import DataLoader, Dataset
 from os.path import dirname, abspath
 from tqdm import tqdm
 import time
+import pickle
 
 dir_path = dirname(dirname(abspath(__file__)))
-
-        
+hprams_file= '/data_module/word_embedder_hprams.pickle'
+model_file= '/data_module/word_embedder.ckpt'
 
 class Encoder(nn.Module):
     def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1, hide_target_rate: float = 0.5  ,**kwargs):
@@ -208,6 +210,7 @@ class WordEmbeddingModel(pl.LightningModule):
 class WordEmbedder():
     def __init__(
         self, 
+        load_embedder: bool = True,
         vocab_builder: VocabBuilder = None, 
         max_vocab_length: int = 20000, 
         embedding_dim: int = 200, 
@@ -215,31 +218,29 @@ class WordEmbedder():
         dropout: float = 0.1, 
         lr: float = 1e-4,
         eps: float = 1e-5, 
-        load_embedder: bool = True,
         window_size: int = 3,
-        model_file: str = '/data_module/word_embedder.ckpt', 
         gpus: int = 1,
         hide_target_rate: float = 0.5,
+        cfg_optimizer: bool= False,
         ):
-        self.window_size = window_size
-        self.vocab_builder = vocab_builder
-        self.model_file = model_file
-        self.max_vocab_length = max_vocab_length
-        try:
-            self.gpus = gpus
-        except:
-            print('Require at least 1 gpu!')
-            return
-            
         if load_embedder:
-            try:
+            if cfg_optimizer:
+                self.load(lr= lr, eps= eps, hide_target_rate= hide_target_rate, dropout= dropout)
+            else:   
                 self.load()
-            except:
-                print('No embedder found')
-                self.model = WordEmbeddingModel(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps, hide_target_rate= hide_target_rate)
+            self.vocab_builder = vocab_builder
         else:
             self.model = WordEmbeddingModel(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, window_size= window_size, dropout= dropout, lr = lr, eps = eps, hide_target_rate= hide_target_rate)
-
+            self.hprams = locals()
+            del self.hprams['self']
+            self.window_size = window_size
+            self.vocab_builder = vocab_builder
+            self.max_vocab_length = max_vocab_length
+            self.gpus = gpus
+            if self.gpus == 0:
+                print('This model requires at least 1 gpu!')
+                del self
+                return
         print(self)
         
         
@@ -298,12 +299,34 @@ class WordEmbedder():
         self.vocab_builder = vocab_builder
     
     def save(self):
-        self.trainer.save_checkpoint(dir_path + self.model_file)
+        #save network
+        self.trainer.save_checkpoint(dir_path + model_file)
+        if self.hprams:
+            #save model hprams
+            with open(dir_path + hprams_file, 'wb') as f:
+                pickle.dump(self.hprams, f)
         print('Saved word embedder')
-    
-    def load(self):
-        print('Loading word embedder')
-        self.model =  WordEmbeddingModel.load_from_checkpoint(dir_path + self.model_file)
+        
+    def load(self, **optim_params):
+        print('Loading word embedder...')
+        kwargs = None
+        with open (dir_path + hprams_file, 'rb') as f:
+            kwargs = pickle.load(f)
+        if kwargs:
+            if optim_params:
+                for attribute in optim_params.keys():
+                    kwargs[attribute] = optim_params[attribute]
+            max_vocab_length = kwargs['max_vocab_length']
+            lr = kwargs['lr']
+            eps = kwargs['eps']
+            window_size = kwargs['window_size']
+            hiden_target_rate = kwargs['hide_target_rate']
+            num_heads = kwargs['num_heads']
+            dropout = kwargs['dropout']
+            embedding_dim = kwargs['embedding_dim']
+            self.model =  WordEmbeddingModel.load_from_checkpoint(dir_path + model_file, max_vocab_length= max_vocab_length, lr= lr, eps= eps, window_size = window_size, hiden_target_rate= hiden_target_rate, num_heads= num_heads, dropout= dropout, embedding_dim= embedding_dim)
+        else:
+            print('No embedder found')
         
     def embed(self, texts: list, batch_size: int = 512, num_workers: int = 4, pin_memory: bool = True) -> Dataset:
         """[embed input texts]
