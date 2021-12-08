@@ -1,8 +1,10 @@
 
 from ssl import DER_cert_to_PEM_cert
+from typing import List
 import torch
 from torch import nn
 import pytorch_lightning as pl
+from torch._C import dtype
 from data_module import VocabBuilder, EmbedDataset, InferenceDataset, ClassifierInputDataset
 from torch.nn.functional import dropout, embedding, normalize
 from .TransformerLayers import PositionalEncoding, MultiHeadAttention
@@ -160,6 +162,8 @@ class WordEmbeddingModel(pl.LightningModule):
         return out
     
     def embed(self, x: torch.Tensor, x0: torch.Tensor):
+        x = F.one_hot(x, self.max_vocab_length).type(torch.float).squeeze()
+        x0 = F.one_hot(x0, self.max_vocab_length).type(torch.float).squeeze()
         return self.encode(x, x0)
     
     def one_hot_dim_reduction(self, one_hot: torch.Tensor):
@@ -336,35 +340,39 @@ class WordEmbedder():
         else:
             print('No embedder found')
         
-    def embed(self, texts: list, batch_size: int = 512, num_workers: int = 4, pin_memory: bool = True) -> Dataset:
+    def embed(self, texts: list, batch_size: int = 512, num_workers: int = 4, pin_memory: bool = True, dataset_split: int = 1):
         """[embed input texts]
 
         Args:
             texts (list): [list of raw texts]
 
         Returns:
-            torch.Tensor: [shape: [num_texts, num_sequences, embedding_dim]]
+            torch.Tensor: [shape: [num_texts, num_words, embedding_dim]]
         """
         
-        #prepare data
+        Datasets = []
         self.count = 0
-        self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference= True, split_index= self.count)
-        words = []
-        
-        #turn on eval mode
-        self.model.eval_mode()
-        
-        #embed
-        print('Embedding')
-        for contexts, targets in tqdm(self.data_loader):
-            #words is a matrix representing a bunch of words, with each row corresponds to a word
-            words.append(self.model.embed(contexts, targets))
+        for i in range(dataset_split):
+            #prepare data
+            self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference= True, split_index= self.count)
+            words = []
             
-        #concatenate into a tensor
-        words = torch.cat(self.words)
-        
-        #wrap in a dataset
-        return ClassifierInputDataset(words, self.text_ends)
+            #turn on eval mode
+            self.model.eval_mode()
+            
+            #embed
+            print(f'Embedding dataset {i + 1}/{dataset_split}...')
+            for contexts, targets in tqdm(self.data_loader):
+                #words is a matrix representing a bunch of words, with each row corresponds to a word
+                words.append(self.model.embed(contexts, targets))
+                
+            #concatenate into a tensor
+            words = torch.cat(words)
+            self.count+=1
+            #wrap in a dataset
+            Datasets.append(ClassifierInputDataset(words, self.text_ends))
+
+        return Datasets
         
         
     

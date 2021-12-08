@@ -75,23 +75,30 @@ class InferenceDataset(Dataset):
         end = start + int(len(texts) / dataset_splits) + 1
         end = len(texts) if len(texts) <  end  else end 
         texts = texts[start : end]
-        #the ends of texts
         self.text_ends = [0]
-        end = 0
+        text_end = 0
         for text in tqdm(texts):
             #tokenize
-            words = self.vocab_builder.tokenize(text)
-            n = len(words)
-            end += n
-            self.text_ends.append(n)
-            for i in range (window_size, n - window_size):
-                end = min(i + window_size, n - 1)
+            wordz = self.vocab_builder.tokenize(text)
+            words = []
+            for word in wordz:
+                for w in word:
+                    if w not in string.punctuation:
+                        words.append(w)
+            s = len(self.targets)
+            for i in range (window_size, len(words) - window_size):
+                end = min(i + window_size + 1, len(words))
                 self.contexts.append(self.transform(words[i - window_size : end]))
-                self.targets.append(self.vocab_builder.one_hot(words[i], self.max_vocab_length, return_one_hot= True))
-                
+                self.targets.append(self.vocab_builder.one_hot(words[i], self.max_vocab_length, return_one_hot= False))
+            t = len(self.targets)
+            text_end += t - s
+            self.text_ends.append(text_end)
+
         #transform into tensors
         self.contexts = torch.stack(self.contexts)
-        self.targets = torch.stack(self.targets)     
+        if self.contexts.shape[0] < window_size * 2 + 1:
+            self.contexts = torch.cat(self.contexts, torch.zeros(window_size * 2 + 1 - self.contexts.shape[0], self.contexts.shape[1], self.contexts.shape[2]))
+        self.targets = torch.stack(self.targets)    
         
     def __len__(self):
         return self.contexts.shape[0]
@@ -99,9 +106,9 @@ class InferenceDataset(Dataset):
     def __getitem__(self, index):
         return self.contexts[index], self.targets[index]
     
-    def transform(self, words: list, return_one_hot: bool):       
+    def transform(self, words: list):       
         #transform into BOW form
-        one_hots = [self.vocab_builder.one_hot(word, self.max_vocab_length, return_one_hot= True) for word in words]
+        one_hots = [self.vocab_builder.one_hot(word, self.max_vocab_length, return_one_hot= False) for word in words]
         one_hots = torch.stack(one_hots)
         return one_hots
     
