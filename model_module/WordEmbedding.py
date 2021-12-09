@@ -406,6 +406,7 @@ class WordEmbedder():
             #if gpu run out of memory, decrease batch size by a half
             if self.flag:
                 batch_size = batch_size / 2
+                self.flag = False
         
         
         if is_train_set:
