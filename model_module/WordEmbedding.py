@@ -405,23 +405,29 @@ class WordEmbedder():
                 torch.save(words, f)
                 del words
             if is_train_set:
-                with open(dir_path + train_ends_file, 'rb') as f:
-                    try:
-                        prev = pickle.load(f)
-                        for index in prev.keys():
-                            texts_ends[index] = prev[index]
-                    except:
-                        pass
+                try:
+                    with open(dir_path + train_ends_file, 'rb') as f:
+                        try:
+                            prev = pickle.load(f)
+                            for index in prev.keys():
+                                texts_ends[index] = prev[index]
+                        except:
+                            pass
+                except:
+                    pass
                 with open(dir_path + train_ends_file, 'wb+') as f:
                     pickle.dump(texts_ends, f)
             else:
-                with open(dir_path + test_ends_file, 'rb') as f:
-                    try:
-                        prev = pickle.load(f)
-                        for index in prev.keys():
-                            texts_ends[index] = prev[index]
-                    except:
-                        pass
+                try:
+                    with open(dir_path + test_ends_file, 'rb') as f:
+                        try:
+                            prev = pickle.load(f)
+                            for index in prev.keys():
+                                texts_ends[index] = prev[index]
+                        except:
+                            pass
+                except:
+                    pass
                 with open(dir_path + test_ends_file, 'wb+') as f:
                     pickle.dump(texts_ends, f)
             print(f'Dataset{i + 1} saved')
