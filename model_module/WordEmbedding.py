@@ -262,7 +262,7 @@ class WordEmbedder():
         info += f'Decoder: {(decode_params / 1e6):.1f} M\n'
         info += '==========================================\n'
         info += f'Total: {(total /1e6):.1f} M\n'
-        info += f'Actual params used for embedding: {(encode_params / 1e6):.1f} M'
+        info += f'Actual params used for embedding: {((encode_params + dim_params) / 1e6):.1f} M'
         return info
     
         
