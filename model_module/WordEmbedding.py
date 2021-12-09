@@ -362,7 +362,7 @@ class WordEmbedder():
         else:
             print('No embedder found')
         
-    def embed(self, texts: list, batch_size: int = 512, num_workers: int = 4, pin_memory: bool = True, dataset_splits: int = 1, is_train_set: bool= True, index_start: int = 0):
+    def embed(self, texts: list, batch_size: int = 512, num_workers: int = 4, pin_memory: bool = True, dataset_splits: int = 1, is_train_set: bool= True, index_start: int = 1):
         r"""[embed input texts]
 
         Args:
@@ -371,7 +371,7 @@ class WordEmbedder():
         Returns:
             embedded tensors saved in files
         """
-        
+        index_start -= 1
         self.count = index_start
         self.setup_trainer(gpus= self.gpus, epochs= 1)
         self.model.cuda()
