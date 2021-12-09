@@ -164,13 +164,6 @@ class WordEmbeddingModel(pl.LightningModule):
         x0 = F.one_hot(x0, self.max_vocab_length).type(torch.float).squeeze()
         x = F.one_hot(x, self.max_vocab_length).type(torch.float).squeeze()
         out = self.encode(x, x0)
-        out = self.decode(out)
-        return out
-    
-    def embed(self, x: torch.Tensor, x0: torch.Tensor):
-        x = F.one_hot(x, self.max_vocab_length).type(torch.float).squeeze().cuda()
-        x0 = F.one_hot(x0, self.max_vocab_length).type(torch.float).squeeze().cuda()
-        out = self.encode(x, x0)
         return out
     
     def one_hot_dim_reduction(self, one_hot: torch.Tensor):
