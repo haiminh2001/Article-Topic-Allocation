@@ -361,9 +361,9 @@ class WordEmbedder():
             #turn on eval mode
             #embed
             if i == 0:
-                words = torch.cat(self.trainer.predict(self.model, self.data_loader, return_predictions= True).cpu())
+                words = torch.cat(self.trainer.predict(self.model, self.data_loader, return_predictions= True)).cpu()
             else:
-                words = torch.cat((words, self.trainer.predict(self.model, self.data_loader, return_predictions= True)))
+                words = torch.cat((words, self.trainer.predict(self.model, self.data_loader, return_predictions= True))).cpu()
             self.count+=1
             #wrap in a dataset
             texts_ends.append(self.text_ends)
