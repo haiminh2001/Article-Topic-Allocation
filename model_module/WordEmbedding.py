@@ -4,7 +4,7 @@ import torch
 from torch import nn
 import pytorch_lightning as pl
 from data_module import VocabBuilder, EmbedDataset, InferenceDataset
-from torch.nn.functional import dropout, embedding, normalize
+from torch.nn.functional import normalize
 from .TransformerLayers import PositionalEncoding, MultiHeadAttention
 from pytorch_lightning import Trainer
 from torch.optim import Adam
