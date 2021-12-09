@@ -76,9 +76,6 @@ class Encoder(nn.Module):
     def dim_params(self):
         dim_reduction = sum(p.numel() for p in self.contexts_dim_reduction.parameters() if p.requires_grad) + sum(p.numel() for p in self.targets_dim_reduction.parameters() if p.requires_grad)
         return dim_reduction
-        
-    def one_hot_dim_reduction(self, one_hot: torch.Tensor):
-        return self.dim_reduction(one_hot)
     
     def forward(self, x: torch.Tensor, x0: torch.Tensor) -> torch.Tensor:
         r"""[Encode words into vectors]
@@ -185,11 +182,7 @@ class WordEmbeddingModel(pl.LightningModule):
         
             return self.encode(x1, x01)
                 
-            
-        
-    
-    def one_hot_dim_reduction(self, one_hot: torch.Tensor):
-        return self.encode.one_hot_dim_reduction(one_hot= one_hot)
+   
     
     def training_step(self, batch, batch_idx):
         contexts, targets = batch
@@ -323,9 +316,6 @@ class WordEmbedder():
             print(f'Finished dataset {i + 1}, total time: {t - s}, time per epoch: {(t - s) / epochs}')
             del self.data_loader
             self.save()
-            
-    def one_hot_dim_reduction(self, one_hot: torch.Tensor):
-        return self.model.one_hot_dim_reduction(one_hot= one_hot)
     
     def load_vocab_builder(self, vocab_builder: VocabBuilder):
         self.vocab_builder = vocab_builder
