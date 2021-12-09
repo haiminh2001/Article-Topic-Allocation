@@ -391,10 +391,11 @@ class WordEmbedder():
             texts_ends.append(self.text_ends)
             
             #save tensors
-            print(f'Saving dataset {i + 1}...')
+            print(f'Saving dataset {i + 1} ...')
             with open(dir_path + tensors_folder + name +'tensor_dataset_' + str(i + 1), 'wb+') as f:
                 torch.save(words, f)
                 del words
+            print(f'Datset{i + 1} saved')
                 
             #if gpu run out of memory, decrease batch size by a half
             if self.flag:
