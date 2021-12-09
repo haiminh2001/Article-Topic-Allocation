@@ -363,7 +363,7 @@ class WordEmbedder():
             if i == 0:
                 words = torch.cat(self.trainer.predict(self.model, self.data_loader, return_predictions= True)).cpu()
             else:
-                words = torch.cat((words, self.trainer.predict(self.model, self.data_loader, return_predictions= True))).cpu()
+                words = torch.cat([words] + self.trainer.predict(self.model, self.data_loader, return_predictions= True)).cpu()
             #wrap in a dataset
             texts_ends.append(self.text_ends)
         
