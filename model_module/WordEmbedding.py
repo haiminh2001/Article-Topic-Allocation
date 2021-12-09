@@ -3,7 +3,6 @@
 import torch
 from torch import nn
 import pytorch_lightning as pl
-from torch._C import dtype
 from data_module import VocabBuilder, EmbedDataset, InferenceDataset
 from torch.nn.functional import dropout, embedding, normalize
 from .TransformerLayers import PositionalEncoding, MultiHeadAttention
@@ -16,6 +15,7 @@ import time
 import pickle
 import os
 import glob
+
 def remove_file_in_filders(folder_path:str, spare:str = 'train'):
     files = glob.glob(folder_path + '/*')
     pattern = spare + '_tensor'
