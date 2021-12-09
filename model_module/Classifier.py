@@ -82,7 +82,7 @@ class Classifer(pl.LightningModule):
             
             
     def count_dataset(self):
-        for file in os.listdir(self.data_folder):
+        for file in os.listdir(dir_path + tensors_folder):
             if 'train_tensor' in file:
                 self.num_train_datasets+= 1
             if 'test_tensor' in file:
