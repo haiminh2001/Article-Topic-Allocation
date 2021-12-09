@@ -399,7 +399,7 @@ class WordEmbedder():
             
             #save tensors
             print(f'Saving dataset {i + 1} ...')
-            with open(dir_path + tensors_folder + name +'tensor_dataset_' + str(i + 1) + '/' + str(dataset_splits), 'wb+') as f:
+            with open(dir_path + tensors_folder + name +'tensor_dataset_' + str(i + 1) + 'outof' + str(dataset_splits), 'wb+') as f:
                 torch.save(words, f)
                 del words
             print(f'Datset{i + 1} saved')
