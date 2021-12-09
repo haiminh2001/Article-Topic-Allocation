@@ -366,7 +366,6 @@ class WordEmbedder():
                 words = torch.cat((words, self.trainer.predict(self.model, self.data_loader, return_predictions= True))).cpu()
             #wrap in a dataset
             texts_ends.append(self.text_ends)
-            del words
         
         #save data
         print('Saving data...')
