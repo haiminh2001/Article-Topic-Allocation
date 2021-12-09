@@ -387,6 +387,10 @@ class WordEmbedder():
             spare = 'train'
             
         if index_start == 0:
+            if is_train_set:
+                os.remove(dir_path + train_ends_file)
+            else:
+                os.remove(dir_path + test_ends_file)
             remove_file_in_filders(dir_path + tensors_folder, spare= spare)
         for i in range(index_start, dataset_splits):
             #prepare data
