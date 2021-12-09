@@ -4,25 +4,30 @@ import torch
 from torch import nn
 import pytorch_lightning as pl
 from torch._C import dtype
-from data_module import VocabBuilder, EmbedDataset, InferenceDataset, ClassifierInputDataset
+from data_module import VocabBuilder, EmbedDataset, InferenceDataset
 from torch.nn.functional import dropout, embedding, normalize
 from .TransformerLayers import PositionalEncoding, MultiHeadAttention
 from pytorch_lightning import Trainer
 from torch.optim import Adam
 from torch.nn import functional as F 
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from os.path import dirname, abspath
 from tqdm import tqdm
 import time
 import pickle
+import os
+import glob
+def remove_file_in_filders(folder_path):
+    files = glob.glob(folder_path + '/*')
+    for f in files:
+        os.remove(f)
 
 dir_path = dirname(dirname(abspath(__file__)))
 hprams_file= '/data_module/saved_data/word_embedder_hprams.pickle'
 model_file= '/data_module/saved_data/word_embedder.ckpt'
-train_file = '/data_module/saved_data/embed_train_tensor.pt'
-test_file = '/data_module/saved_data/embed_test_tensor.pt'
 train_ends_file = '/data_module/saved_data/embed_train_ends.pickle'
 test_ends_file = '/data_module/saved_data/embed_test_ends.pickle'
+tensors_folder = '/data_module/saved_data/temp_tensors'
 
 class Encoder(nn.Module):
     def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1, hide_target_rate: float = 0.5  ,**kwargs):
@@ -371,29 +376,36 @@ class WordEmbedder():
         self.model.eval_mode()
         self.flag = False
         texts_ends = []
+        #remove existed tensors
+        if is_train_set:
+            name = '/train_'
+        else:
+            name = '/test_'
+        remove_file_in_filders(dir_path + tensors_folder)
         for i in range(dataset_splits):
             #prepare data
             self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference= True, split_index= self.count, dataset_splits= dataset_splits)
             #turn on eval mode
             #embed
-            if i == 0:
-                words = torch.cat(self.trainer.predict(self.model, self.data_loader, return_predictions= True)).cpu()
-            else:
-                words = torch.cat([words] + [x.cpu() for x in self.trainer.predict(self.model, self.data_loader, return_predictions= True)])
-            #wrap in a dataset
+            words = torch.cat(self.trainer.predict(self.model, self.data_loader, return_predictions= True)).cpu()
             texts_ends.append(self.text_ends)
+            
+            #save tensors
+            print(f'Saving dataset {i + 1}...')
+            with open(dir_path + tensors_folder + name +'tensor_dataset_' + str(i + 1), 'wb+') as f:
+                torch.save(words, f)
+                del words
+                
+            #if gpu run out of memory, decrease batch size by a half
             if self.flag:
-                batch_size = 256
+                batch_size = batch_size / 2
         
-        #save data
-        print('Saving data...')
+        
         if is_train_set:
-            torch.save(words, dir_path + train_file)
-            with open(dir_path + train_ends_file, 'wb') as f:
+            with open(dir_path + train_ends_file, 'wb+') as f:
                 pickle.dump(texts_ends, f)
         else:
-            torch.save(words, dir_path + test_file)
-            with open(dir_path + test_ends_file, 'wb') as f:
+            with open(dir_path + test_ends_file, 'wb+') as f:
                 pickle.dump(texts_ends, f)
         
         print('Data saved')
