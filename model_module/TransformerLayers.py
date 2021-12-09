@@ -22,7 +22,7 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
         
     def forward(self, sequence: torch.Tensor) -> torch.Tensor:
-        """[Add Positonal Encoding vector]
+        r"""[Add Positonal Encoding vector]
 
         Args:
             sequence (torch.Tensor): [shape: [batch_size, sequence_length, embedding_dim]]
@@ -50,7 +50,7 @@ class MultiHeadAttention(nn.Module):
         
     
     def forward(self, sequence: torch.Tensor) -> torch.Tensor:
-        """[Multihead Attention]
+        r"""[Multihead Attention]
 
         Args:
             sequence (torch.Tensor): [shape: [batch_size, sequence_length, embedding_dim]]

@@ -79,7 +79,7 @@ class Encoder(nn.Module):
         return self.dim_reduction(one_hot)
     
     def forward(self, x: torch.Tensor, x0: torch.Tensor) -> torch.Tensor:
-        """[Encode words into vectors]
+        r"""[Encode words into vectors]
 
         Args:
             x (torch.Tensor): [sequence of words, shape: [num_sequences, max_vocab_length]]
@@ -138,7 +138,7 @@ class Decoder(nn.Module):
 
     
     def forward(self, encoded: torch.Tensor) -> torch.Tensor:
-        """[summary]
+        r"""[summary]
 
         Args:
             sequences (torch.Tensor): [shape: [num_sequences, embedding_size]]
@@ -361,13 +361,13 @@ class WordEmbedder():
             print('No embedder found')
         
     def embed(self, texts: list, batch_size: int = 512, num_workers: int = 4, pin_memory: bool = True, dataset_splits: int = 1, is_train_set: bool= True):
-        """[embed input texts]
+        r"""[embed input texts]
 
         Args:
             texts (list): [list of raw texts]
 
         Returns:
-            torch.Tensor: [shape: [num_texts, num_words, embedding_dim]]
+            embedded tensors saved in files
         """
         
         self.count = 0
