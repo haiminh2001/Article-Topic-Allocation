@@ -359,13 +359,13 @@ class WordEmbedder():
         
         self.count = 0
         self.setup_trainer(gpus= self.gpus, epochs= 1)
+        self.model.cuda()
+        self.model.eval_mode()
         texts_ends = []
         for i in range(dataset_splits):
             #prepare data
             self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference= True, split_index= self.count, dataset_splits= dataset_splits)
             #turn on eval mode
-            self.model.cuda()
-            self.model.eval_mode()
             #embed
             if i == 0:
                 words = torch.cat(self.trainer.predict(self.model, self.data_loader, return_predictions= True).cpu())
