@@ -325,7 +325,7 @@ class WordEmbedder():
         self.trainer.save_checkpoint(dir_path + model_file, weights_only= True)
         if self.hprams:
             #save model hprams
-            with open(dir_path + hprams_file, 'wb') as f:
+            with open(dir_path + hprams_file, 'wb+') as f:
                 pickle.dump(self.hprams, f)
         print('Saved word embedder')
         
