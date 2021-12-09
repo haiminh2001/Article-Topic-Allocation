@@ -1,6 +1,5 @@
 
-from ssl import DER_cert_to_PEM_cert
-from typing import List
+
 import torch
 from torch import nn
 import pytorch_lightning as pl
@@ -18,8 +17,12 @@ import time
 import pickle
 
 dir_path = dirname(dirname(abspath(__file__)))
-hprams_file= '/data_module/word_embedder_hprams.pickle'
-model_file= '/data_module/word_embedder.ckpt'
+hprams_file= '/data_module/saved_data/word_embedder_hprams.pickle'
+model_file= '/data_module/saved_data/word_embedder.ckpt'
+train_file = '/data_module/saved_data/embed_train_tensor.pt'
+test_file = '/data_module/saved_data/embed_test_tensor.pt'
+train_ends_file = '/data_module/saved_data/embed_train_ends.pickle'
+test_ends_file = '/data_module/saved_data/embed_test_ends.pickle'
 
 class Encoder(nn.Module):
     def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1, hide_target_rate: float = 0.5  ,**kwargs):
@@ -156,15 +159,19 @@ class WordEmbeddingModel(pl.LightningModule):
     def train_mode(self):
         self.encode.train_mode()
     
-    def forward(self, x: torch.Tensor, x0:torch.Tensor):
+    def forward(self, batch):
+        x0, x = batch
+        x0 = F.one_hot(x0, self.max_vocab_length).type(torch.float).squeeze()
+        x = F.one_hot(x, self.max_vocab_length).type(torch.float).squeeze()
         out = self.encode(x, x0)
         out = self.decode(out)
         return out
     
     def embed(self, x: torch.Tensor, x0: torch.Tensor):
-        x = F.one_hot(x, self.max_vocab_length).type(torch.float).squeeze()
-        x0 = F.one_hot(x0, self.max_vocab_length).type(torch.float).squeeze()
-        return self.encode(x, x0)
+        x = F.one_hot(x, self.max_vocab_length).type(torch.float).squeeze().cuda()
+        x0 = F.one_hot(x0, self.max_vocab_length).type(torch.float).squeeze().cuda()
+        out = self.encode(x, x0)
+        return out
     
     def one_hot_dim_reduction(self, one_hot: torch.Tensor):
         return self.encode.one_hot_dim_reduction(one_hot= one_hot)
@@ -274,7 +281,7 @@ class WordEmbedder():
         if inference:
             dataset = InferenceDataset(split_index= split_index, dataset_splits = dataset_splits, texts = texts, vocab_builder= self.vocab_builder, max_vocab_length= self.max_vocab_length, window_size= self.window_size)
             self.data_loader = DataLoader(dataset= dataset, batch_size= batch_size, shuffle= False, pin_memory= pin_memory, num_workers= num_workers)
-            self.text_ends = dataset.get_text_ends
+            self.text_ends = dataset.get_text_ends()
         else:
             dataset = EmbedDataset(split_index= split_index, dataset_splits= dataset_splits, texts = texts, vocab_builder= self.vocab_builder, max_vocab_length= self.max_vocab_length, window_size= self.window_size)
             self.data_loader = DataLoader(dataset= dataset, batch_size= batch_size, shuffle= True, pin_memory= pin_memory, num_workers= num_workers)
@@ -340,7 +347,7 @@ class WordEmbedder():
         else:
             print('No embedder found')
         
-    def embed(self, texts: list, batch_size: int = 512, num_workers: int = 4, pin_memory: bool = True, dataset_split: int = 1):
+    def embed(self, texts: list, batch_size: int = 512, num_workers: int = 4, pin_memory: bool = True, dataset_splits: int = 1, is_train_set: bool= True):
         """[embed input texts]
 
         Args:
@@ -350,29 +357,37 @@ class WordEmbedder():
             torch.Tensor: [shape: [num_texts, num_words, embedding_dim]]
         """
         
-        Datasets = []
         self.count = 0
-        for i in range(dataset_split):
+        self.setup_trainer(gpus= self.gpus, epochs= 1)
+        texts_ends = []
+        for i in range(dataset_splits):
             #prepare data
-            self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference= True, split_index= self.count)
-            words = []
-            
+            self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference= True, split_index= self.count, dataset_splits= dataset_splits)
             #turn on eval mode
+            self.model.cuda()
             self.model.eval_mode()
-            
             #embed
-            print(f'Embedding dataset {i + 1}/{dataset_split}...')
-            for contexts, targets in tqdm(self.data_loader):
-                #words is a matrix representing a bunch of words, with each row corresponds to a word
-                words.append(self.model.embed(contexts, targets))
-                
-            #concatenate into a tensor
-            words = torch.cat(words)
+            if i == 0:
+                words = torch.cat(self.trainer.predict(self.model, self.data_loader, return_predictions= True).cpu())
+            else:
+                words = torch.cat((words, self.trainer.predict(self.model, self.data_loader, return_predictions= True)))
             self.count+=1
             #wrap in a dataset
-            Datasets.append(ClassifierInputDataset(words, self.text_ends))
-
-        return Datasets
+            texts_ends.append(self.text_ends)
+            del words
+        
+        #save data
+        print('Saving data...')
+        if is_train_set:
+            torch.save(words, dir_path + train_file)
+            with open(dir_path + train_ends_file, 'wb') as f:
+                pickle.dump(texts_ends, f)
+        else:
+            torch.save(words, dir_path + test_file)
+            with open(dir_path + test_ends_file, 'wb') as f:
+                pickle.dump(texts_ends, f)
+        
+        print('Data saved')
         
         
     
