@@ -17,9 +17,12 @@ import time
 import pickle
 import os
 import glob
-def remove_file_in_filders(folder_path):
+def remove_file_in_filders(folder_path:str, spare:str = 'train'):
     files = glob.glob(folder_path + '/*')
+    pattern = spare + '_tensor'
     for f in files:
+        if pattern in f:
+            continue
         os.remove(f)
 
 dir_path = dirname(dirname(abspath(__file__)))
@@ -379,9 +382,11 @@ class WordEmbedder():
         #remove existed tensors
         if is_train_set:
             name = '/train_'
+            spare = 'test'
         else:
             name = '/test_'
-        remove_file_in_filders(dir_path + tensors_folder)
+            spare = 'train'
+        remove_file_in_filders(dir_path + tensors_folder, spare= spare)
         for i in range(dataset_splits):
             #prepare data
             self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference= True, split_index= self.count, dataset_splits= dataset_splits)
