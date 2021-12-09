@@ -363,7 +363,7 @@ class WordEmbedder():
         else:
             print('No embedder found')
         
-    def embed(self, texts: list, batch_size: int = 512, num_workers: int = 4, pin_memory: bool = True, dataset_splits: int = 1, is_train_set: bool= True):
+    def embed(self, texts: list, batch_size: int = 512, num_workers: int = 4, pin_memory: bool = True, dataset_splits: int = 1, is_train_set: bool= True, index_start: int = 0):
         r"""[embed input texts]
 
         Args:
@@ -373,7 +373,7 @@ class WordEmbedder():
             embedded tensors saved in files
         """
         
-        self.count = 0
+        self.count = index_start
         self.setup_trainer(gpus= self.gpus, epochs= 1)
         self.model.cuda()
         self.model.eval_mode()
@@ -386,8 +386,10 @@ class WordEmbedder():
         else:
             name = '/test_'
             spare = 'train'
-        remove_file_in_filders(dir_path + tensors_folder, spare= spare)
-        for i in range(dataset_splits):
+            
+        if index_start == 0:
+            remove_file_in_filders(dir_path + tensors_folder, spare= spare)
+        for i in range(index_start, dataset_splits):
             #prepare data
             self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference= True, split_index= self.count, dataset_splits= dataset_splits)
             #turn on eval mode
@@ -397,7 +399,7 @@ class WordEmbedder():
             
             #save tensors
             print(f'Saving dataset {i + 1} ...')
-            with open(dir_path + tensors_folder + name +'tensor_dataset_' + str(i + 1), 'wb+') as f:
+            with open(dir_path + tensors_folder + name +'tensor_dataset_' + str(i + 1) + '/' + str(dataset_splits), 'wb+') as f:
                 torch.save(words, f)
                 del words
             print(f'Datset{i + 1} saved')
