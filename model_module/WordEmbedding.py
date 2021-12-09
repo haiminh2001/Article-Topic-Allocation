@@ -12,7 +12,6 @@ from torch.optim import Adam
 from torch.nn import functional as F 
 from torch.utils.data import DataLoader
 from os.path import dirname, abspath
-from tqdm import tqdm
 import time
 import pickle
 import os
