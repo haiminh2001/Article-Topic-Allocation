@@ -19,7 +19,7 @@ class DataHolder(ABC):
                 df = pd.read_csv(self.data_folder + '/' +  file)
                 texts = df.iloc[: , 1 ]
                 labels = df.iloc[: , 0 ]
-                if file.startswtih('test'):
+                if file.startswith('test'):
                     self.data['test'] = self.data['test'].append(pd.DataFrame({'texts': texts, 'labels': labels}))
                 else:
                     self.data['train'] = self.data['train'].append(pd.DataFrame({'texts': texts, 'labels': labels}))
