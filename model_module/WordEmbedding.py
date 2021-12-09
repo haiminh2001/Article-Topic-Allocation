@@ -377,7 +377,7 @@ class WordEmbedder():
         self.model.cuda()
         self.model.eval_mode()
         self.flag = False
-        texts_ends = []
+        texts_ends = {}
         #remove existed tensors
         if is_train_set:
             name = '/train_'
@@ -394,13 +394,32 @@ class WordEmbedder():
             #turn on eval mode
             #embed
             words = torch.cat(self.trainer.predict(self.model, self.data_loader, return_predictions= True)).cpu()
-            texts_ends.append(self.text_ends)
-            
+            texts_ends[i + 1] = self.text_ends
             #save tensors
             print(f'Saving dataset {i + 1} ...')
             with open(dir_path + tensors_folder + name +'tensor_dataset_' + str(i + 1) + 'outof' + str(dataset_splits), 'wb+') as f:
                 torch.save(words, f)
                 del words
+            if is_train_set:
+                with open(dir_path + train_ends_file, 'rb') as f:
+                    try:
+                        prev = pickle.load(f)
+                        for index in prev.keys():
+                            texts_ends[index] = prev[index]
+                    except:
+                        pass
+                with open(dir_path + train_ends_file, 'wb+') as f:
+                    pickle.dump(texts_ends, f)
+            else:
+                with open(dir_path + test_ends_file, 'rb') as f:
+                    try:
+                        prev = pickle.load(f)
+                        for index in prev.keys():
+                            texts_ends[index] = prev[index]
+                    except:
+                        pass
+                with open(dir_path + test_ends_file, 'wb+') as f:
+                    pickle.dump(texts_ends, f)
             print(f'Dataset{i + 1} saved')
                 
             #if gpu run out of memory, decrease batch size by a half
@@ -409,12 +428,7 @@ class WordEmbedder():
                 self.flag = False
         
         
-        if is_train_set:
-            with open(dir_path + train_ends_file, 'wb+') as f:
-                pickle.dump(texts_ends, f)
-        else:
-            with open(dir_path + test_ends_file, 'wb+') as f:
-                pickle.dump(texts_ends, f)
+        
         
         print('Data saved')
         
