@@ -144,3 +144,5 @@ tempCodeRunnerFile.py
 word_embedder.ckpt
 
 lightning_logs/
+
+test.pickle
