@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 class EmbedDataset(Dataset):
     def __init__(self,dataset_splits: int, split_index: int, texts: list, vocab_builder: VocabBuilder, max_vocab_length: int = 20000, window_size: int = 5):
-        """
+        r"""
         [Prepare data for training word embedder]
         """
         super(EmbedDataset, self).__init__()
@@ -56,7 +56,7 @@ class EmbedDataset(Dataset):
                 
 class InferenceDataset(Dataset):
     def __init__(self,texts: list, vocab_builder: VocabBuilder, max_vocab_length: int = 20000, window_size: int = 5, dataset_splits:int = 10, split_index: int = 0):
-        """[prepare data for embedding before training classifier]
+        r"""[prepare data for embedding before training classifier]
 
         Args:
             texts (list): [list of raw texts]
