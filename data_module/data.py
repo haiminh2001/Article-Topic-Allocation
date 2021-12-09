@@ -51,7 +51,7 @@ class DataHolder(ABC):
         info += '\nnum labels: \n'
         info += str(self.data['train']['labels'].value_counts())
         
-        info = '\ntest data:\ncolumns: '
+        info+= '\ntest data:\ncolumns: '
         
         for column in self.data['test'].columns:
             info += str(column) + ', '
