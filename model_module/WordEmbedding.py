@@ -401,7 +401,7 @@ class WordEmbedder():
             with open(dir_path + tensors_folder + name +'tensor_dataset_' + str(i + 1) + 'outof' + str(dataset_splits), 'wb+') as f:
                 torch.save(words, f)
                 del words
-            print(f'Datset{i + 1} saved')
+            print(f'Dataset{i + 1} saved')
                 
             #if gpu run out of memory, decrease batch size by a half
             if self.flag:
