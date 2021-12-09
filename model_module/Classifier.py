@@ -45,7 +45,7 @@ class Classifer(pl.LightningModule):
     
     def setup_test_data(self, index: int= 0):    
         total = self.num_test_datasets 
-        print(f'Dataset{index + 1}/{total}')
+        print(f'Dataset: {index + 1}/{total}')
         #get text ends
      
         with open(dir_path + train_ends_file, 'rb') as f:
