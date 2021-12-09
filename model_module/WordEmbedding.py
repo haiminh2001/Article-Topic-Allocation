@@ -161,10 +161,25 @@ class WordEmbeddingModel(pl.LightningModule):
     
     def forward(self, batch):
         x0, x = batch
-        x0 = F.one_hot(x0, self.max_vocab_length).type(torch.float).squeeze()
-        x = F.one_hot(x, self.max_vocab_length).type(torch.float).squeeze()
-        out = self.encode(x, x0)
-        return out
+        self.flag = True
+        try:
+            x0 = F.one_hot(x0, self.max_vocab_length).type(torch.float).squeeze()
+            x = F.one_hot(x, self.max_vocab_length).type(torch.float).squeeze()
+            out = self.encode(x, x0)
+            return out
+        except:
+            #if run out of memory, reduce batch size to 256
+            x01 = F.one_hot(x0[:256], self.max_vocab_length).type(torch.float).squeeze()
+            x1 = F.one_hot(x[:256], self.max_vocab_length).type(torch.float).squeeze()
+            for i in range(256, x.shape[0], 256):
+                end = min (i + 256, x.shape[0])
+                x01 = torch.cat((x01, F.one_hot(x0[i : end], self.max_vocab_length).type(torch.float).squeeze()))
+                x1 = torch.cat((x1, F.one_hot(x[i : end], self.max_vocab_length).type(torch.float).squeeze())) 
+        
+            return self.encode(x1, x01)
+                
+            
+        
     
     def one_hot_dim_reduction(self, one_hot: torch.Tensor):
         return self.encode.one_hot_dim_reduction(one_hot= one_hot)
@@ -354,6 +369,7 @@ class WordEmbedder():
         self.setup_trainer(gpus= self.gpus, epochs= 1)
         self.model.cuda()
         self.model.eval_mode()
+        self.flag = False
         texts_ends = []
         for i in range(dataset_splits):
             #prepare data
@@ -366,6 +382,8 @@ class WordEmbedder():
                 words = torch.cat([words] + [x.cpu() for x in self.trainer.predict(self.model, self.data_loader, return_predictions= True)])
             #wrap in a dataset
             texts_ends.append(self.text_ends)
+            if self.flag:
+                batch_size = 256
         
         #save data
         print('Saving data...')
