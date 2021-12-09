@@ -43,7 +43,7 @@ class DataHolder(ABC):
     def __str__(self) -> str:
         info = 'Data summary:\ntrain data:\ncolumns: '
         
-        for column in self.data.columns:
+        for column in self.data['train'].columns:
             info += str(column) + ', '
         
         info += 'rows: ' + str(self.data['train'].shape[0])
@@ -52,7 +52,7 @@ class DataHolder(ABC):
         
         info = '\ntest data:\ncolumns: '
         
-        for column in self.data.columns:
+        for column in self.data['test'].columns:
             info += str(column) + ', '
         
         info += 'rows: ' + str(self.data['test'].shape[0])
