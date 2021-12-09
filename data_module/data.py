@@ -11,8 +11,9 @@ class DataHolder(ABC):
     def read_csv(self):
         self.data = {}
         self.data['train'] = {'texts': [], 'labels': []}
-        self.data['train'] = pd.DataFrame(self.data)
+        self.data['train'] = pd.DataFrame(self.data['train'])
         self.data['test'] = {'texts': [], 'labels': []}
+        self.data['test'] = pd.DataFrame(self.data['test'])
         print('Loading data...')
         for file in tqdm(os.listdir(self.data_folder)):
             if file.endswith('.csv'):
