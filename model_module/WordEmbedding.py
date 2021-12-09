@@ -168,7 +168,6 @@ class WordEmbeddingModel(pl.LightningModule):
     
     def forward(self, batch):
         x0, x = batch
-        self.flag = True
         try:
             x0 = F.one_hot(x0, self.max_vocab_length).type(torch.float).squeeze()
             x = F.one_hot(x, self.max_vocab_length).type(torch.float).squeeze()
@@ -176,6 +175,7 @@ class WordEmbeddingModel(pl.LightningModule):
             return out
         except:
             #if run out of memory, reduce batch size to 256
+            self.flag = True
             x01 = F.one_hot(x0[:256], self.max_vocab_length).type(torch.float).squeeze()
             x1 = F.one_hot(x[:256], self.max_vocab_length).type(torch.float).squeeze()
             for i in range(256, x.shape[0], 256):
