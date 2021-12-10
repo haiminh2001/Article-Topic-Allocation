@@ -27,19 +27,19 @@ class DataHolder(ABC):
                 
     @property
     def train_texts(self):
-        return self.data['train']['texts']
+        return self.data['train']['texts'].tolist()
     
     @property
     def train_labels(self):
-        return self.data['train']['labels']
+        return self.data['train']['labels'].tolist()
     
     @property
     def test_texts(self):
-        return self.data['test']['texts']
+        return self.data['test']['texts'].tolist()
     
     @property
     def test_labels(self):
-        return self.data['test']['texts']
+        return self.data['test']['texts'].tolist()
     
     def __str__(self) -> str:
         info = 'Data summary:\ntrain data:\ncolumns: '

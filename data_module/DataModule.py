@@ -5,6 +5,23 @@ from .VocabularyBuilder import VocabBuilder
 import string
 from tqdm import tqdm
 
+labels_dict = {
+        'Sức khỏe': 0,
+        'Ô tô xe máy': 1,
+        'Giải trí': 2,
+        'Giáo dục': 3,
+        'Pháp luật': 4,
+        'Số hóa': 5,
+        'Đời sống': 6,
+        'Du lịch': 7,
+        'Thể thao': 8,      
+        'Khoa học': 9,
+        'Kinh doanh': 10,
+        'Thế giới': 11,
+        'Thời sự': 12,
+}
+  
+    
 class EmbedDataset(Dataset):
     def __init__(self,dataset_splits: int, split_index: int, texts: list, vocab_builder: VocabBuilder, max_vocab_length: int = 20000, window_size: int = 5):
         r"""
@@ -55,7 +72,7 @@ class EmbedDataset(Dataset):
     
                 
 class InferenceDataset(Dataset):
-    def __init__(self,texts: list, vocab_builder: VocabBuilder, max_vocab_length: int = 20000, window_size: int = 5, dataset_splits:int = 10, split_index: int = 0):
+    def __init__(self,texts: list, labels: list, vocab_builder: VocabBuilder, max_vocab_length: int = 20000, window_size: int = 5, dataset_splits:int = 10, split_index: int = 0):
         r"""[prepare data for embedding before training classifier]
 
         Args:
@@ -75,9 +92,12 @@ class InferenceDataset(Dataset):
         end = start + int(len(texts) / dataset_splits) + 1
         end = len(texts) if len(texts) <  end  else end 
         texts = texts[start : end]
+        labels = labels[start : end]
         self.text_ends = [0]
+        self.labels = []
         text_end = 0
         for text in tqdm(texts):
+            self.labels.append(labels_dict[labels[len(self.text_ends) - 1]])
             #tokenize
             wordz = self.vocab_builder.tokenize(text)
             words = []
@@ -114,6 +134,9 @@ class InferenceDataset(Dataset):
     
     def get_text_ends(self):
         return self.text_ends
+    
+    def get_labels(self):
+        return self.labels
 
 class ClassifierInputDataset(Dataset):
     def __init__(self, input_tensor: torch.Tensor, text_ends: list, labels: torch.Tensor = None):

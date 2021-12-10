@@ -27,8 +27,8 @@ def remove_file_in_filders(folder_path:str, spare:str = 'train'):
 dir_path = dirname(dirname(abspath(__file__)))
 hprams_file= '/data_module/saved_data/word_embedder_hprams.pickle'
 model_file= '/data_module/saved_data/word_embedder.ckpt'
-train_ends_file = '/data_module/saved_data/embed_train_ends.pickle'
-test_ends_file = '/data_module/saved_data/embed_test_ends.pickle'
+train_info_file = '/data_module/saved_data/embed_train_info.pickle'
+test_info_file = '/data_module/saved_data/embed_test_info.pickle'
 tensors_folder = '/data_module/saved_data/temp_tensors'
 
 class Encoder(nn.Module):
@@ -284,12 +284,13 @@ class WordEmbedder():
     def setup_trainer(self, gpus, epochs):
         self.trainer = Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None, log_every_n_steps= 5)
     
-    def setup_data(self, split_index: int, texts: list, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True, inference = False, dataset_splits: int = 10):
+    def setup_data(self, split_index: int, texts: list, labels:list= None, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True, inference = False, dataset_splits: int = 10):
         self.count +=1
         if inference:
-            dataset = InferenceDataset(split_index= split_index, dataset_splits = dataset_splits, texts = texts, vocab_builder= self.vocab_builder, max_vocab_length= self.max_vocab_length, window_size= self.window_size)
+            dataset = InferenceDataset(labels= labels, split_index= split_index, dataset_splits = dataset_splits, texts = texts, vocab_builder= self.vocab_builder, max_vocab_length= self.max_vocab_length, window_size= self.window_size)
             self.data_loader = DataLoader(dataset= dataset, batch_size= batch_size, shuffle= False, pin_memory= pin_memory, num_workers= num_workers)
             self.text_ends = dataset.get_text_ends()
+            self.labels = dataset.get_labels()
         else:
             dataset = EmbedDataset(split_index= split_index, dataset_splits= dataset_splits, texts = texts, vocab_builder= self.vocab_builder, max_vocab_length= self.max_vocab_length, window_size= self.window_size)
             self.data_loader = DataLoader(dataset= dataset, batch_size= batch_size, shuffle= True, pin_memory= pin_memory, num_workers= num_workers)
@@ -352,14 +353,14 @@ class WordEmbedder():
         else:
             print('No embedder found')
         
-    def embed(self, texts: list, batch_size: int = 512, num_workers: int = 4, pin_memory: bool = True, dataset_splits: int = 1, is_train_set: bool= True, index_start: int = 1):
+    def embed(self, texts: list, labels: list, batch_size: int = 512, num_workers: int = 4, pin_memory: bool = True, dataset_splits: int = 1, is_train_set: bool= True, index_start: int = 1):
         r"""[embed input texts]
 
         Args:
             texts (list): [list of raw texts]
 
         Returns:
-            embedded tensors saved in files
+            embedded tensors, labels saved in files
         """
         index_start -= 1
         self.count = index_start
@@ -367,7 +368,7 @@ class WordEmbedder():
         self.model.cuda()
         self.model.eval_mode()
         self.flag = False
-        texts_ends = {}
+        info = {}
         #remove existed tensors
         if is_train_set:
             name = '/train_'
@@ -379,19 +380,19 @@ class WordEmbedder():
         if index_start == 0:
             try:
                 if is_train_set:
-                    os.remove(dir_path + train_ends_file)
+                    os.remove(dir_path + train_info_file)
                 else:
-                    os.remove(dir_path + test_ends_file)
+                    os.remove(dir_path + test_info_file)
             except:
                 pass
             remove_file_in_filders(dir_path + tensors_folder, spare= spare)
         for i in range(index_start, dataset_splits):
             #prepare data
-            self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference= True, split_index= self.count, dataset_splits= dataset_splits)
+            self.setup_data(labels= labels, texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference= True, split_index= self.count, dataset_splits= dataset_splits)
             #turn on eval mode
             #embed
             words = torch.cat(self.trainer.predict(self.model, self.data_loader, return_predictions= True)).cpu()
-            texts_ends[i + 1] = self.text_ends
+            info[i + 1] = {'text_ends': self.text_ends, 'labels': self.labels}
             #save tensors
             print(f'Saving dataset {i + 1} ...')
             with open(dir_path + tensors_folder + name +'tensor_dataset_' + str(i + 1) + 'outof' + str(dataset_splits), 'wb+') as f:
@@ -399,30 +400,32 @@ class WordEmbedder():
                 del words
             if is_train_set:
                 try:
-                    with open(dir_path + train_ends_file, 'rb') as f:
-                        try:
-                            prev = pickle.load(f)
-                            for index in prev.keys():
-                                texts_ends[index] = prev[index]
-                        except:
-                            pass
+                    if index_start != 0:
+                        with open(dir_path + train_info_file, 'rb') as f:
+                            try:
+                                prev = pickle.load(f)
+                                for index in prev.keys():
+                                    info[index] = prev[index]
+                            except:
+                                pass
                 except:
                     pass
-                with open(dir_path + train_ends_file, 'wb+') as f:
-                    pickle.dump(texts_ends, f)
+                with open(dir_path + train_info_file, 'wb+') as f:
+                    pickle.dump(info, f)
             else:
                 try:
-                    with open(dir_path + test_ends_file, 'rb') as f:
-                        try:
-                            prev = pickle.load(f)
-                            for index in prev.keys():
-                                texts_ends[index] = prev[index]
-                        except:
-                            pass
+                    if index_start != 0:
+                        with open(dir_path + test_info_file, 'rb') as f:
+                            try:
+                                prev = pickle.load(f)
+                                for index in prev.keys():
+                                    info[index] = prev[index]
+                            except:
+                                pass
                 except:
                     pass
-                with open(dir_path + test_ends_file, 'wb+') as f:
-                    pickle.dump(texts_ends, f)
+                with open(dir_path + test_info_file, 'wb+') as f:
+                    pickle.dump(info, f)
             print(f'Dataset{i + 1} saved')
                 
             #if gpu run out of memory, decrease batch size by a half
