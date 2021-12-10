@@ -14,6 +14,7 @@ test_ends_file = '/data_module/saved_data/embed_test_ends.pickle'
 class Classifer(pl.LightningModule):
     def __init__(self, data_holder:DataHolder, num_workers:int = 4, train_batch_size:int = 256, eval_batch_size:int = 1024):
         super(Classifer, self).__init__()
+        print('Collecting data information...')
         self.num_train_datasets = 0
         self.num_test_datasets = 0
         self.count_dataset()
