@@ -39,7 +39,7 @@ class DataHolder(ABC):
     
     @property
     def test_labels(self):
-        return self.data['test']['texts'].tolist()
+        return self.data['test']['labels'].tolist()
     
     def __str__(self) -> str:
         info = 'Data summary:\ntrain data:\ncolumns: '
