@@ -143,6 +143,7 @@ class ClassifierInputDataset(Dataset):
         self.labels = labels
         super(ClassifierInputDataset, self).__init__()
         self.texts = []
+        self.max_length = 0
         for i in range(1, len(text_ends)):
             self.texts.append(torch.clone(input_tensor[text_ends[i - 1] : text_ends[i]]).detach())        
     
