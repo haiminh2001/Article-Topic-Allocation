@@ -2,6 +2,7 @@ from abc import ABC
 import pandas as pd
 import os
 from tqdm import tqdm
+
 path = os.path.dirname(os.path.abspath(__file__))
 class DataHolder(ABC):
     def __init__(self, data_folder: str = '/articles_csv'):
@@ -24,6 +25,11 @@ class DataHolder(ABC):
                     self.data['test'] = self.data['test'].append(pd.DataFrame({'texts': texts, 'labels': labels}))
                 else:
                     self.data['train'] = self.data['train'].append(pd.DataFrame({'texts': texts, 'labels': labels}))
+        
+        # shuffle the DataFrame rows
+        self.data['train'] = self.data['train'].sample(frac = 1)    
+        self.data['test'] = self.data['test'].sample(frac = 1)    
+
                 
     @property
     def train_texts(self):
