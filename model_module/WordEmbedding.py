@@ -303,10 +303,11 @@ class WordEmbedder():
         self.count = 0
         #turn on train mode
         self.model.train_mode()
-        self.setup_trainer(gpus= self.gpus, epochs = epochs)
+        
         for i in range(dataset_splits):
             s = time.time()
             #prepare data
+            self.setup_trainer(gpus= self.gpus, epochs = epochs)
             self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, dataset_splits= dataset_splits, split_index= self.count)
             #fit        
             self.trainer.fit(
