@@ -144,13 +144,14 @@ class ClassifierInputDataset(Dataset):
         super(ClassifierInputDataset, self).__init__()
         self.texts = []
         for i in range(1, len(text_ends)):
-            self.texts.append(torch.clone(input_tensor[text_ends[i - 1] : text_ends[i]]).detach())
-            
-    def add_labels(self, labels: torch.Tensor):
-        self.labels = labels
+            self.texts.append(torch.clone(input_tensor[text_ends[i - 1] : text_ends[i]]).detach())        
     
     def __len__(self):
         return len(self.texts)
+    
+    @property
+    def embedding_dim(self):
+        return self.texts[0].shape[-1]
     
     def __getitem__(self, index):
         if self.labels:
