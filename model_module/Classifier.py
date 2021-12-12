@@ -9,7 +9,6 @@ import os
 from torch.utils.data import DataLoader
 from torch import nn
 from torch.nn.functional import one_hot, cross_entropy
-import numpy as np
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 
 
