@@ -145,17 +145,23 @@ class ClassifierInputDataset(Dataset):
         self.texts = []
         self.max_length = 0
         for i in range(1, len(text_ends)):
-            self.texts.append(torch.clone(input_tensor[text_ends[i - 1] : text_ends[i]]).detach())        
+            self.texts.append(torch.clone(input_tensor[text_ends[i - 1] : text_ends[i]]).detach())       
+            l =  text_ends[i] - text_ends[i - 1]
+            self.max_length = l if l > self.max_length else self.max_length
     
     def __len__(self):
         return len(self.texts)
-    
+        
     @property
     def embedding_dim(self):
         return self.texts[0].shape[-1]
     
     def __getitem__(self, index):
+        tensor = self.texts[index]
+        if tensor.shape[0] < self.max_length:
+            tensor = torch.cat((tensor, torch.full((self.max_length - tensor.shape[0], tensor.shape[1]), -1)))
         if self.labels:
-            return self.texts[index], self.labels[index]
+            
+            return tensor, self.labels[index]
         else:
-            return self.texts[index]
+            return tensor

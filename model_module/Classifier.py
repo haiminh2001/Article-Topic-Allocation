@@ -18,7 +18,7 @@ info_test_file = '/data_module/saved_data/embed_test_info.pickle'
 num_labels = 13
 
 class Classifier():
-    def __init__(self, data_holder:DataHolder, 
+    def __init__(self,
                  num_workers:int = 4, 
                  train_batch_size:int = 256,
                  eval_batch_size:int = 1024,
@@ -36,7 +36,6 @@ class Classifier():
         self.num_train_datasets = 0
         self.num_test_datasets = 0
         self.count_dataset()
-        self.data_holder = data_holder
         self.num_workers = num_workers
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
@@ -98,17 +97,15 @@ class Classifier():
                 self.num_test_datasets+= 1
     
     def setup_model(self):
-        self.classifier = SimpleClassifier(self.embedding_dim, self.dropout, num_labels, lr= self.lr, eps = self.eps)
+        self.classifier = SimpleClassifier(self.embedding_dim, num_labels, lr= self.lr, eps = self.eps)
     
     def setup_trainer(self, gpus, epochs):
-        self.trainer = pl.Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None, log_every_n_steps= 5)
+        self.trainer = pl.Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None, log_every_n_steps= 1)
     
     def fit(self):
-        self.setup_trainer(self.gpus, self.epochs)
-        
-            
         for i in range(self.num_train_datasets):
             self.setup_train_data(self.valid_split, index= i)
+            self.setup_trainer(self.gpus, self.epochs)
             if i == 0:
                 if self.model_set_upped == False:
                     self.setup_model()
@@ -125,44 +122,41 @@ class Classifier():
             
         
 class SimpleClassifier(pl.LightningModule):
-    def __init__(self, embedding_dim:int, dropout:float, output_dim:int, lr:float, eps:float):
+    def __init__(self, embedding_dim:int, output_dim:int, lr:float, eps:float):
         super().__init__()
-        self.importance_eval = nn.Sequential(
-                nn.Linear(embedding_dim, embedding_dim),
-                nn.Dropout(dropout),
-                nn.ReLU(),
-            ) 
-        self.combine = nn.Sequential(
-                nn.Linear(embedding_dim * 2, embedding_dim),
-                nn.Dropout(dropout),
-                nn.ReLU(),
-            ) 
-
-        self.conclude = nn.Sequential(
-                nn.Linear(embedding_dim, embedding_dim),
-                nn.Dropout(dropout),
-                nn.ReLU(),
-                nn.Linear(50, output_dim),
-                nn.Dropout(dropout),
-                nn.ReLU(),  
-            ) 
+        input_size = embedding_dim
+        self.cnn = nn.Sequential(
+            nn.Conv1d(in_channels = input_size, out_channels = input_size, kernel_size = 3, padding = 1, stride = 1),
+            nn.ReLU(),
+            nn.BatchNorm1d(input_size),
+            nn.MaxPool1d(2),
+        )
+        
+        self.lstm1 = nn.LSTM(input_size=input_size, hidden_size = 50, batch_first=True) #CNNLSTM
+        self.lstm2 =  nn.LSTM(input_size = 50, hidden_size = 50, batch_first = True)
+        self.fc1 = nn.Linear(50, output_dim) #fully connected last layer
+        self.relu = nn.ReLU()
         self.embedding_dim = embedding_dim
         self.lr = lr
         self.eps = eps
     
-    def forward(self, text_tensor):
-        result = torch.zeros(self.embedding_dim)
-        for i in range(text_tensor.shape[0]):
-            x = self.importance_eval(text_tensor[i].squeeze())
-            result =  normalize(self.combine(torch.cat((result, x))))
-        return self.conclude(result)
+    def forward(self, x):
+        inp = torch.moveaxis(x, 1, 2)
+        inp = self.cnn(inp)
+        inp = torch.moveaxis(inp, 1, 2)
+
+        self.out1, _ = self.lstm1(inp) #CNNLSTM with input, hidden, and internal state
+        self.out2, (hn2, _) = self.lstm2(self.out1)
+
+        hn2 = hn2.view(-1, 50) #reshaping the data for Dense layer next
+        out = self.relu(hn2)
+        out = self.fc1(out) #first Dense
+        return out 
     
-    
-        
     
     def training_step(self, batch, batchidx):
         texts, labels = batch
-        onehot = one_hot(labels, num_labels)
+        onehot = one_hot(labels, num_labels).type(torch.float)
         pred = self(texts)
         loss = cross_entropy(pred, onehot)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
@@ -174,25 +168,12 @@ class SimpleClassifier(pl.LightningModule):
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
         avg_acc = torch.stack([x["accuracy"] for x in outputs]).mean()
-        print('Epochs {}: loss: {}, accuracy: {}'.format(self.current_epoch, avg_loss, avg_acc))
+        print('Epochs {}: train_loss: {}, accuracy: {}'.format(self.current_epoch, avg_loss, avg_acc))
         
     def configure_optimizers(self):
-        optimizer_grouped_parameters = [
-            {
-                "params": p
-                    for p in self.combine.parameters()
-            },
-            {
-                "params": p
-                    for p in self.conclude.parameters()
-            },
-            {
-                "params": p
-                    for p in self.importance_eval.parameters()
-            },
-        ]
+      
         optimizer = torch.optim.Adam(
-            optimizer_grouped_parameters,
+            self.parameters(),
             lr= self.lr,
             eps= self.eps,
         )
@@ -202,7 +183,9 @@ class SimpleClassifier(pl.LightningModule):
         return self.training_step(batch, batchidx)
     
     def validation_epoch_end(self, outputs):
-        self.training_epoch_end(outputs)
+        avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
+        avg_acc = torch.stack([x["accuracy"] for x in outputs]).mean()
+        print('Epochs {}: val_loss: {}, accuracy: {}'.format(self.current_epoch, avg_loss, avg_acc))
         
     
         
