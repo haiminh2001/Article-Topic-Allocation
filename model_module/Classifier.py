@@ -17,7 +17,7 @@ info_train_file = 'data_module/saved_data/embed_test_info.pickle'
 info_test_file = 'data_module/saved_data/embed_test_info.pickle'
 num_labels = 13
 
-class Classifer(pl.LightningModule):
+class Classifier(pl.LightningModule):
     def __init__(self, data_holder:DataHolder, 
                  num_workers:int = 4, 
                  train_batch_size:int = 256,
@@ -31,7 +31,7 @@ class Classifer(pl.LightningModule):
                  gpus:int =1, 
                  epochs:int = 5,
                  ):
-        super(Classifer, self).__init__()
+        super(Classifier, self).__init__()
         print('Collecting data information...')
         self.num_train_datasets = 0
         self.num_test_datasets = 0
