@@ -166,14 +166,14 @@ class SimpleClassifier(pl.LightningModule):
         return {'loss': loss, 'pred': pred, 'labels' : labels}
     
     def training_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
+        pred = torch.cat([x["pred"] for x in outputs]).squeeze().detach().cpu().numpy()
+        labels = torch.cat([x["labels"] for x in outputs]).squeeze().detach().cpu().numpy()
+        avg_acc = accuracy_score(labels, pred)
+        print('Epochs {}: train_loss: {}, accuracy: {}, f1_score: {}'.format(self.current_epoch, avg_loss, avg_acc, f1_score(labels, pred, average='macro')))
         if self.current_epoch % 5 == 0:
-            avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
-            pred = torch.cat([x["pred"] for x in outputs]).squeeze().detach().cpu().numpy()
-            labels = torch.cat([x["labels"] for x in outputs]).squeeze().detach().cpu().numpy()
-            avg_acc = accuracy_score(labels, pred)
-            print('Epochs {}: train_loss: {}, accuracy: {}'.format(self.current_epoch, avg_loss, avg_acc))
             print(confusion_matrix(labels, pred))
-            print(f1_score(labels, pred, average='macro'))
+
         
     def configure_optimizers(self):
       
@@ -188,15 +188,13 @@ class SimpleClassifier(pl.LightningModule):
         return self.training_step(batch, batchidx)
     
     def validation_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
+        pred = torch.cat([x["pred"] for x in outputs]).squeeze().detach().cpu().numpy()
+        labels = torch.cat([x["labels"] for x in outputs]).squeeze().detach().cpu().numpy()
+        avg_acc = accuracy_score(labels, pred)
+        print('Epochs {}: val_loss: {}, accuracy: {}, f1_score: {}'.format(self.current_epoch, avg_loss, avg_acc, f1_score(labels, pred, average='macro')))
         if self.current_epoch % 5 == 0:
-            avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
-            pred = torch.cat([x["pred"] for x in outputs]).squeeze().detach().cpu().numpy()
-            labels = torch.cat([x["labels"] for x in outputs]).squeeze().detach().cpu().numpy()
-            avg_acc = accuracy_score(labels, pred)
-            
-            print('Epochs {}: val_loss: {}, accuracy: {}'.format(self.current_epoch, avg_loss, avg_acc))
             print(confusion_matrix(labels, pred))
-            print(f1_score(labels, pred, average='macro'))
         
     
         
