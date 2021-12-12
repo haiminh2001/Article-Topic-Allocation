@@ -8,12 +8,14 @@ import pickle
 import os
 from torch.utils.data import DataLoader
 from torch import nn
-from torch.nn.functional import normalize, one_hot, cross_entropy
+from torch.nn.functional import one_hot, cross_entropy
+import numpy as np
+from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 
 
 dir_path = dirname(dirname(abspath(__file__)))
 tensors_folder = '/data_module/saved_data/temp_tensors'
-info_train_file = '/data_module/saved_data/embed_test_info.pickle'
+info_train_file = '/data_module/saved_data/embed_train_info.pickle'
 info_test_file = '/data_module/saved_data/embed_test_info.pickle'
 num_labels = 13
 
@@ -161,14 +163,18 @@ class SimpleClassifier(pl.LightningModule):
         loss = cross_entropy(pred, onehot)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         pred = torch.argmax(pred, dim=1)        
-        acc = torch.sum(pred == labels) / texts.shape[0]
         
-        return {'loss': loss, 'accuracy': acc}
+        return {'loss': loss, 'pred': pred, 'labels' : labels}
     
     def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
-        avg_acc = torch.stack([x["accuracy"] for x in outputs]).mean()
-        print('Epochs {}: train_loss: {}, accuracy: {}'.format(self.current_epoch, avg_loss, avg_acc))
+        if self.current_epoch % 5 == 0:
+            avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
+            pred = torch.cat([x["pred"] for x in outputs]).squeeze().detach().cpu().numpy()
+            labels = torch.cat([x["labels"] for x in outputs]).squeeze().detach().cpu().numpy()
+            avg_acc = accuracy_score(labels, pred)
+            print('Epochs {}: train_loss: {}, accuracy: {}'.format(self.current_epoch, avg_loss, avg_acc))
+            print(confusion_matrix(labels, pred))
+            print(f1_score(labels, pred, average='macro'))
         
     def configure_optimizers(self):
       
@@ -183,9 +189,15 @@ class SimpleClassifier(pl.LightningModule):
         return self.training_step(batch, batchidx)
     
     def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
-        avg_acc = torch.stack([x["accuracy"] for x in outputs]).mean()
-        print('Epochs {}: val_loss: {}, accuracy: {}'.format(self.current_epoch, avg_loss, avg_acc))
+        if self.current_epoch % 5 == 0:
+            avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
+            pred = torch.cat([x["pred"] for x in outputs]).squeeze().detach().cpu().numpy()
+            labels = torch.cat([x["labels"] for x in outputs]).squeeze().detach().cpu().numpy()
+            avg_acc = accuracy_score(labels, pred)
+            
+            print('Epochs {}: val_loss: {}, accuracy: {}'.format(self.current_epoch, avg_loss, avg_acc))
+            print(confusion_matrix(labels, pred))
+            print(f1_score(labels, pred, average='macro'))
         
     
         
