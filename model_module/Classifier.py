@@ -171,7 +171,7 @@ class SimpleClassifier(pl.LightningModule):
         labels = torch.cat([x["labels"] for x in outputs]).squeeze().detach().cpu().numpy()
         avg_acc = accuracy_score(labels, pred)
         print('Epochs {}: train_loss: {}, accuracy: {}, f1_score: {}'.format(self.current_epoch, avg_loss, avg_acc, f1_score(labels, pred, average='macro')))
-        if self.current_epoch % 5 == 0:
+        if self.current_epoch % 5 == 0 and self.current_epoch > 0:
             print(confusion_matrix(labels, pred))
 
         
@@ -193,7 +193,7 @@ class SimpleClassifier(pl.LightningModule):
         labels = torch.cat([x["labels"] for x in outputs]).squeeze().detach().cpu().numpy()
         avg_acc = accuracy_score(labels, pred)
         print('Epochs {}: val_loss: {}, accuracy: {}, f1_score: {}'.format(self.current_epoch, avg_loss, avg_acc, f1_score(labels, pred, average='macro')))
-        if self.current_epoch % 5 == 0:
+        if self.current_epoch % 5 == 0 and self.current_epoch > 0:
             print(confusion_matrix(labels, pred))
         
     
