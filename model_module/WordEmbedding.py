@@ -160,9 +160,11 @@ class WordEmbeddingModel(pl.LightningModule):
     
     def eval_mode(self):
         self.encode.eval_mode()
+        self.eval()
         
     def train_mode(self):
         self.encode.train_mode()
+        self.train()
     
     def forward(self, batch):
         x0, x = batch
