@@ -15,6 +15,7 @@ import time
 import pickle
 import os
 import glob
+from sklearn.metrics import accuracy_score
 
 def remove_file_in_folders(folder_path:str, spare:str = 'train'):
     files = glob.glob(folder_path + '/*')
@@ -185,19 +186,23 @@ class WordEmbeddingModel(pl.LightningModule):
    
     
     def training_step(self, batch, batch_idx):
-        contexts, targets = batch
+        contexts, targets1 = batch
         contexts = F.one_hot(contexts, self.max_vocab_length).type(torch.float).squeeze()
-        targets = F.one_hot(targets, self.max_vocab_length).type(torch.float).squeeze()
+        targets = F.one_hot(targets1, self.max_vocab_length).type(torch.float).squeeze()
         out = self.encode(targets, contexts)
         out = self.decode(out)
         #cross entropy since out put is in one hot form
         loss = F.cross_entropy(out, targets)
+        out = torch.argmax(out, dim= 1)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-        return {'loss': loss}
+        return {'loss': loss, 'pred': out, 'targets': targets1}
     
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
-        print('Epochs {}: loss: {}'.format(self.current_epoch, avg_loss))
+        pred = torch.cat([x["pred"] for x in outputs]).squeeze().detach().cpu().numpy()
+        labels = torch.cat([x["targets"] for x in outputs]).squeeze().detach().cpu().numpy()
+        avg_acc = accuracy_score(labels, pred)
+        print('Epochs {}: loss: {}, accuracy: {}'.format(self.current_epoch, avg_loss, avg_acc))
         
     @property
     def num_params(self):
