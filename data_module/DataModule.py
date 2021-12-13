@@ -159,7 +159,7 @@ class ClassifierInputDataset(Dataset):
     def __getitem__(self, index):
         tensor = self.texts[index]
         if tensor.shape[0] < self.max_length:
-            tensor = torch.cat((tensor, torch.full((self.max_length - tensor.shape[0], tensor.shape[1]), -1)))
+            tensor = torch.cat((torch.full((self.max_length - tensor.shape[0], tensor.shape[1]), -1), tensor))
         if self.labels:
             
             return tensor, self.labels[index]
