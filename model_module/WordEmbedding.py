@@ -397,7 +397,6 @@ class WordEmbedder():
         for i in range(index_start, dataset_splits):
             #prepare data
             self.setup_data(labels= labels, texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference= True, split_index= self.count, dataset_splits= dataset_splits)
-            #turn on eval mode
             #embed
             words = torch.cat(self.trainer.predict(self.model, self.data_loader, return_predictions= True)).cpu()
             info[i + 1] = {'text_ends': self.text_ends, 'labels': self.labels}
