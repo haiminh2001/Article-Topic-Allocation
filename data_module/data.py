@@ -2,6 +2,16 @@ from abc import ABC
 import pandas as pd
 import os
 from tqdm import tqdm
+from string import digits, punctuation
+
+def remove_puncs_digits(s: str):
+    s = s.translate(str.maketrans('', '', punctuation + digits)).lower()
+    return s
+
+
+def standardize(df: pd.DataFrame):
+    df['texts'] = df['texts'].apply(remove_puncs_digits)
+
 
 path = os.path.dirname(os.path.abspath(__file__))
 class DataHolder(ABC):
@@ -29,7 +39,8 @@ class DataHolder(ABC):
         # shuffle the DataFrame rows
         self.data['train'] = self.data['train'].sample(frac = 1)    
         self.data['test'] = self.data['test'].sample(frac = 1)    
-
+        standardize(self.data['train'])
+        standardize(self.data['test'])
                 
     @property
     def train_texts(self):
