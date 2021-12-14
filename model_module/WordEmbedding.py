@@ -114,7 +114,7 @@ class Encoder(nn.Module):
         z2 = self.fc(z1)
         
         #add and normalize
-        z2 = normalize(z2 + z1 + x1, dim= 1)
+        z2 = normalize(z2 + z1, dim= 1)
         
         return z2
 
