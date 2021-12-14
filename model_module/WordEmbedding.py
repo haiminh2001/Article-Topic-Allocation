@@ -4,7 +4,6 @@ import torch
 from torch import nn
 import pytorch_lightning as pl
 from data_module import VocabBuilder, EmbedDataset, InferenceDataset
-from torch.nn.functional import normalize
 from .TransformerLayers import PositionalEncoding, MultiHeadAttention
 from pytorch_lightning import Trainer
 from torch.optim import Adam
@@ -69,14 +68,12 @@ class Encoder(nn.Module):
         
     def eval_mode(self):
         self.hide_target_rate = 0
+        self.eval()
     
     def train_mode(self):
         self.hide_target_rate = self.save_hide_target_rate
+        self.train()
     
-    @property
-    def dim_params(self):
-        dim_reduction = sum(p.numel() for p in self.contexts_dim_reduction.parameters() if p.requires_grad) + sum(p.numel() for p in self.targets_dim_reduction.parameters() if p.requires_grad)
-        return dim_reduction
     
     def forward(self, x: torch.Tensor, x0: torch.Tensor) -> torch.Tensor:
         r"""[Encode words into vectors]
@@ -108,15 +105,18 @@ class Encoder(nn.Module):
         z1 = self.combine(torch.transpose(z1, 1, 2)).squeeze()
 
         #add and normalize
-        z1 = normalize(z1 + x1, dim= 1)
+        z1 = F.normalize(z1 + x1, dim= 1)
         
         #feadforwad
         z2 = self.fc(z1)
         
         #add and normalize
-        z2 = normalize(z2 + z1, dim= 1)
+        z2 = F.normalize(z2 + z1, dim= 1)
         
         return z2
+        
+
+        
 
 class Decoder(nn.Module):
     def __init__(self,max_vocab_length:int, embedding_dim:int, dropout: float = 0.1, **kwargs):
@@ -138,11 +138,9 @@ class Decoder(nn.Module):
 
     
     def forward(self, encoded: torch.Tensor) -> torch.Tensor:
-        r"""[summary]
-
+        """[summary]
         Args:
             sequences (torch.Tensor): [shape: [num_sequences, embedding_size]]
-
         Returns:
             torch.Tensor: [shape: [num_sequences, max_vocab_length]]
         """
@@ -208,11 +206,10 @@ class WordEmbeddingModel(pl.LightningModule):
         
     @property
     def num_params(self):
-        dim_params = self.encode.dim_params
-        encode_params = sum(p.numel() for p in self.encode.parameters() if p.requires_grad) - dim_params
+        encode_params = sum(p.numel() for p in self.encode.parameters() if p.requires_grad) 
         decode_params = sum(p.numel() for p in self.decode.parameters() if p.requires_grad)
-        total_params = encode_params + decode_params + dim_params
-        return dim_params, encode_params, decode_params, total_params
+        total_params = encode_params + decode_params 
+        return encode_params, decode_params, total_params
     
     def configure_optimizers(self):
         
@@ -277,14 +274,12 @@ class WordEmbedder():
         
         
     def __str__(self) -> str:
-        dim_params, encode_params, decode_params, total = self.model.num_params
+        encode_params, decode_params, total = self.model.num_params
         info = 'Weights summary\n==========================================\n'
-        info += f'Dimension reduction: {(dim_params / 1e6):.1f} M\n'
         info += f'Encoder: {(encode_params / 1e6):.1f} M\n'
         info += f'Decoder: {(decode_params / 1e6):.1f} M\n'
         info += '==========================================\n'
         info += f'Total: {(total /1e6):.1f} M\n'
-        info += f'Actual params used for embedding: {((encode_params + dim_params) / 1e6):.1f} M'
         return info
     
         
@@ -309,13 +304,18 @@ class WordEmbedder():
             dataset_splits: int = 10):
         self.count = 0
         #turn on train mode
-        self.model.train_mode()
-        
+        self.setup_trainer(gpus= self.gpus, epochs = epochs)
+        self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, dataset_splits= dataset_splits, split_index= self.count)
+        lr_finder= self.trainer.tuner.lr_find(self.model, train_dataloaders= self.data_loader)
+        self.model.lr = lr_finder.suggestion()
+        print(f'Learning rate= {self.model.lr}')
         for i in range(dataset_splits):
             s = time.time()
             #prepare data
-            self.setup_trainer(gpus= self.gpus, epochs = epochs)
-            self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, dataset_splits= dataset_splits, split_index= self.count)
+            if i != 0:
+                self.setup_trainer(gpus= self.gpus, epochs = epochs)
+                self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, dataset_splits= dataset_splits, split_index= self.count)
+           
             #fit        
             self.trainer.fit(
                 model= self.model,
