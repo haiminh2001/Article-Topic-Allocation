@@ -38,8 +38,10 @@ class VocabBuilder:
                     else:
                         self.vocab[word] += 1
                         
-        self.vocab = dict(sorted(self.vocab.items(), key=lambda x: x[1], reverse=True)           )   
-        self.vocab = dict(take(max_vocab_length, self.vocab.items()))
+        self.vocab = dict(sorted(self.vocab.items(), key=lambda x: x[1], reverse=True))   
+        self.df = take(max_vocab_length, self.vocab.items())
+        self.vocab = dict([(x[0], i) for i, x in enumerate(self.df)])
+        self.df = dict(self.df)
         
         with open(path + self.vocab_file, 'wb+') as f:
             pickle.dump(self.vocab, f)
