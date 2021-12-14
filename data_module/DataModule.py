@@ -44,7 +44,6 @@ class EmbedDataset(Dataset):
             words = []
             for word in wordz:
                 for w in word:
-                    if w not in string.punctuation:
                         words.append(w)
             for i in range (window_size, len(words) - window_size):
                 end = min(i + window_size + 1, len(words))
