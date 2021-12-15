@@ -34,23 +34,7 @@ tensors_folder = '/data_module/saved_data/temp_tensors'
 class Encoder(nn.Module):
     def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1, hide_target_rate: float = 0.5  ,**kwargs):
         super(Encoder, self).__init__()
-        buffer = max(int((max_vocab_length + embedding_dim) / 20), 1000)
-        self.contexts_dim_reduction = nn.Sequential(
-            nn.Linear(max_vocab_length, buffer),
-            nn.ReLU(),
-            nn.Dropout(p= dropout),
-            nn.Linear(buffer, embedding_dim),
-            nn.ReLU(),
-            nn.Dropout(p= dropout),
-        )
-        self.targets_dim_reduction = nn.Sequential(
-            nn.Linear(max_vocab_length, buffer),
-            nn.ReLU(),
-            nn.Dropout(p= dropout),
-            nn.Linear(buffer, embedding_dim),
-            nn.ReLU(),
-            nn.Dropout(p= dropout),
-        )
+        self.embedding = nn.Embedding(max_vocab_length, embedding_dim)        
         self.pe = PositionalEncoding(embedding_dim, sequence_length) 
         self.mha = MultiHeadAttention(embedding_dim, num_heads= num_heads)
         self.fc = nn.Sequential(
@@ -86,14 +70,14 @@ class Encoder(nn.Module):
             torch.Tensor: [sequence of vectors, shape: [num_sequences, embedding_dim]]
         """
         #dim reduction
-        x01 = self.contexts_dim_reduction(x0) 
+        x01 = self.embedding(x0).squeeze()
         
         #hide target or not
         hide = torch.rand(1)[0]
         if (hide < self.hide_target_rate):
             x1 = torch.zeros(x.shape[0], x01.shape[-1]).cuda()
         else:
-            x1 = self.targets_dim_reduction(x)
+            x1 = self.embedding(x).squeeze()
         
         #add positional encoding
         x01 = self.pe(x01)
@@ -166,40 +150,27 @@ class WordEmbeddingModel(pl.LightningModule):
     
     def forward(self, batch):
         x0, x = batch
-        try:
-            x0 = F.one_hot(x0, self.max_vocab_length).type(torch.float).squeeze()
-            x = F.one_hot(x, self.max_vocab_length).type(torch.float).squeeze()
-            out = self.encode(x, x0)
-            return out
-        except:
-            #if run out of memory, reduce batch size to 256
-            self.flag = True
-            x01 = F.one_hot(x0[:256], self.max_vocab_length).type(torch.float).squeeze()
-            x1 = F.one_hot(x[:256], self.max_vocab_length).type(torch.float).squeeze()
-            for i in range(256, x.shape[0], 256):
-                end = min (i + 256, x.shape[0])
-                x01 = torch.cat((x01, F.one_hot(x0[i : end], self.max_vocab_length).type(torch.float).squeeze()))
-                x1 = torch.cat((x1, F.one_hot(x[i : end], self.max_vocab_length).type(torch.float).squeeze())) 
-        
-            return self.encode(x1, x01)
-                
-   
+        out = self.encode(x, x0)
+        return out
+       
     
     def training_step(self, batch, batch_idx):
-        contexts, targets = batch
-        contexts = F.one_hot(contexts, self.max_vocab_length).type(torch.float).squeeze()
-        targets = F.one_hot(targets, self.max_vocab_length).type(torch.float).squeeze()
-        out = self.encode(targets, contexts)
+        contexts, targets1 = batch
+        targets = F.one_hot(targets1, self.max_vocab_length).type(torch.float).squeeze()
+        out = self.encode(targets1, contexts)
         out = self.decode(out)
         #cross entropy since out put is in one hot form
-        contexts = torch.sum(contexts, dim= 1)
-        loss = custom_loss(out, contexts)
+        loss = F.cross_entropy(out, targets)
+        out = torch.argmax(out, dim= 1)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-        return {'loss': loss}
+        return {'loss': loss, 'pred': out, 'targets': targets1}
     
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
-        print('Epochs {}: loss: {}'.format(self.current_epoch, avg_loss))
+        pred = torch.cat([x["pred"] for x in outputs]).squeeze().detach().cpu().numpy()
+        labels = torch.cat([x["targets"] for x in outputs]).squeeze().detach().cpu().numpy()
+        avg_acc = accuracy_score(labels, pred)
+        print('Epochs {}: loss: {}, accuracy: {}'.format(self.current_epoch, avg_loss, avg_acc))
         
     @property
     def num_params(self):
@@ -226,19 +197,6 @@ class WordEmbeddingModel(pl.LightningModule):
             eps= self.eps,
         )
         return optimizer
-    
-def custom_loss(y_true, y_pred):
-    tp = torch.sum(y_true*y_pred, dim=0)
-    
-    fp = torch.sum((1-y_true)*y_pred, dim=0)
-    fn = torch.sum(y_true*(1-y_pred), dim=0)
-
-    p = tp / (tp + fp + 1e-10)
-    r = tp / (tp + fn + 1e-10)
-
-    f1 = 2*p*r / (p+r+1e-10)
-    f1 = torch.where(torch.isnan(f1), torch.zeros_like(f1), f1)
-    return 1 - torch.mean(f1)
 
 class WordEmbedder():
     def __init__(
