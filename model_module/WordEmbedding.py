@@ -186,23 +186,20 @@ class WordEmbeddingModel(pl.LightningModule):
    
     
     def training_step(self, batch, batch_idx):
-        contexts, targets1 = batch
+        contexts, targets = batch
         contexts = F.one_hot(contexts, self.max_vocab_length).type(torch.float).squeeze()
-        targets = F.one_hot(targets1, self.max_vocab_length).type(torch.float).squeeze()
+        targets = F.one_hot(targets, self.max_vocab_length).type(torch.float).squeeze()
         out = self.encode(targets, contexts)
         out = self.decode(out)
         #cross entropy since out put is in one hot form
-        loss = F.cross_entropy(out, targets)
-        out = torch.argmax(out, dim= 1)
+        contexts = torch.mean(contexts, dim= 1)
+        loss = F.mse_loss(out, contexts)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-        return {'loss': loss, 'pred': out, 'targets': targets1}
+        return {'loss': loss}
     
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
-        pred = torch.cat([x["pred"] for x in outputs]).squeeze().detach().cpu().numpy()
-        labels = torch.cat([x["targets"] for x in outputs]).squeeze().detach().cpu().numpy()
-        avg_acc = accuracy_score(labels, pred)
-        print('Epochs {}: loss: {}, accuracy: {}'.format(self.current_epoch, avg_loss, avg_acc))
+        print('Epochs {}: loss: {}'.format(self.current_epoch, avg_loss))
         
     @property
     def num_params(self):
