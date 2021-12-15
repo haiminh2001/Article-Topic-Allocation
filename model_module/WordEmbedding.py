@@ -192,8 +192,8 @@ class WordEmbeddingModel(pl.LightningModule):
         out = self.encode(targets, contexts)
         out = self.decode(out)
         #cross entropy since out put is in one hot form
-        contexts = torch.mean(contexts, dim= 1)
-        loss = F.mse_loss(out, contexts)
+        contexts = torch.sum(contexts, dim= 1)
+        loss = custom_loss(out, contexts)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return {'loss': loss}
     
@@ -227,6 +227,19 @@ class WordEmbeddingModel(pl.LightningModule):
         )
         return optimizer
     
+def custom_loss(y_true, y_pred):
+    tp = torch.sum(y_true*y_pred, dim=0)
+    
+    fp = torch.sum((1-y_true)*y_pred, dim=0)
+    fn = torch.sum(y_true*(1-y_pred), dim=0)
+
+    p = tp / (tp + fp + 1e-10)
+    r = tp / (tp + fn + 1e-10)
+
+    f1 = 2*p*r / (p+r+1e-10)
+    f1 = torch.where(torch.isnan(f1), torch.zeros_like(f1), f1)
+    return 1 - torch.mean(f1)
+
 class WordEmbedder():
     def __init__(
         self, 
@@ -262,6 +275,7 @@ class WordEmbedder():
             del self.hprams['vocab_builder']
             del self.hprams['load_embedder']
             del self.hprams['cfg_optimizer']
+            del self.hprams['use_lr_finder']
             self.window_size = window_size
             self.vocab_builder = vocab_builder
             self.max_vocab_length = max_vocab_length
