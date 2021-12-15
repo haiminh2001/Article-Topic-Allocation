@@ -55,9 +55,9 @@ class VocabBuilder:
             open(path + self.vocab_file, 'w').close()
             print('Erased!')
             
-    def get(self, word:str):
+    def get(self, word:str, max_vocab_length):
         rs = self.vocab.get(word)
-        if rs != None:
+        if rs != None and rs < max_vocab_length:
             return rs
         else:
             return 0

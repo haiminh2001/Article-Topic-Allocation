@@ -245,6 +245,7 @@ class WordEmbedder():
         gpus: int = 1,
         hide_target_rate: float = 0.5,
         cfg_optimizer: bool= False,
+        use_lr_finder:bool = True,
         ):
         if load_embedder:
             if cfg_optimizer:
@@ -306,9 +307,10 @@ class WordEmbedder():
         #turn on train mode
         self.setup_trainer(gpus= self.gpus, epochs = epochs)
         self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, dataset_splits= dataset_splits, split_index= self.count)
-        lr_finder= self.trainer.tuner.lr_find(self.model, train_dataloaders= self.data_loader)
-        self.model.lr = lr_finder.suggestion()
-        print(f'Learning rate= {self.model.lr}')
+        if self.use_lr_finder:
+            lr_finder= self.trainer.tuner.lr_find(self.model, train_dataloaders= self.data_loader)
+            self.model.lr = lr_finder.suggestion()
+            print(f'Learning rate= {self.model.lr}')
         for i in range(dataset_splits):
             s = time.time()
             #prepare data

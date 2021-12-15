@@ -48,7 +48,7 @@ class EmbedDataset(Dataset):
             for i in range (window_size, len(words) - window_size):
                 end = min(i + window_size + 1, len(words))
                 self.contexts.append(self.transform(words[i - window_size : end]))
-                self.targets.append(torch.Tensor([self.vocab_builder.get(words[i])]).type(torch.long))
+                self.targets.append(torch.Tensor([self.vocab_builder.get(words[i], self.max_vocab_length)]).type(torch.long))
 
         #transform into tensors
         self.contexts = torch.stack(self.contexts)
@@ -65,7 +65,7 @@ class EmbedDataset(Dataset):
     
     def transform(self, words: list):       
         #transform into BOW form
-        bow = [torch.Tensor([self.vocab_builder.get(word)]).type(torch.long) for word in words]
+        bow = [torch.Tensor([self.vocab_builder.get(word, self.max_vocab_length)]).type(torch.long) for word in words]
         bow = torch.stack(bow)
         return bow
     
@@ -108,7 +108,7 @@ class InferenceDataset(Dataset):
             for i in range (window_size, len(words) - window_size):
                 end = min(i + window_size + 1, len(words))
                 self.contexts.append(self.transform(words[i - window_size : end]))
-                self.targets.append(torch.Tensor([self.vocab_builder.get(words[i])]).type(torch.long))
+                self.targets.append(torch.Tensor([self.vocab_builder.get(words[i], self.max_vocab_length)]).type(torch.long))
             t = len(self.targets)
             text_end += t - s
             self.text_ends.append(text_end)
@@ -127,7 +127,7 @@ class InferenceDataset(Dataset):
     
     def transform(self, words: list):       
         #transform into BOW form
-        bow = [torch.Tensor([self.vocab_builder.get(word)]).type(torch.long) for word in words]
+        bow = [torch.Tensor([self.vocab_builder.get(word, self.max_vocab_length)]).type(torch.long) for word in words]
         bow = torch.stack(bow)
         return bow
     
