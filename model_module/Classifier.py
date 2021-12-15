@@ -31,9 +31,11 @@ class Classifier():
                  eps:float = 1e-5,
                  gpus:int =1, 
                  epochs:int = 5,
+                 use_lr_finder:bool = True,
                  ):
         super(Classifier, self).__init__()
         print('Collecting data information...')
+        self.use_lr_finder= use_lr_finder
         self.num_train_datasets = 0
         self.num_test_datasets = 0
         self.count_dataset()
@@ -104,14 +106,23 @@ class Classifier():
         self.trainer = pl.Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None, log_every_n_steps= 1)
     
     def fit(self):
-        for i in range(self.num_train_datasets):
-            self.setup_train_data(self.valid_split, index= i)
-            self.setup_trainer(self.gpus, self.epochs)
-            if i == 0:
-                if self.model_set_upped == False:
+        self.setup_train_data(self.valid_split, index= 0)
+        self.setup_trainer(self.gpus, self.epochs)
+        if self.model_set_upped == False:
                     self.setup_model()
                     self.model_set_upped = True
-                    
+        self.classifier.train()
+        if self.use_lr_finder:
+            
+            lr_finder= self.trainer.tuner.lr_find(self.classifier, train_dataloaders= self.train_data_loader)
+            self.classifier.lr = lr_finder.suggestion()
+            print(f'Learning rate= {self.classifier.lr}')
+            
+        for i in range(self.num_train_datasets):
+            if i !=0:
+                self.setup_train_data(self.valid_split, index= i)
+                self.setup_trainer(self.gpus, self.epochs)
+        
             self.trainer.fit(
                 model= self.classifier,
                 train_dataloaders= self.train_data_loader,
@@ -171,7 +182,7 @@ class SimpleClassifier(pl.LightningModule):
         labels = torch.cat([x["labels"] for x in outputs]).squeeze().detach().cpu().numpy()
         avg_acc = accuracy_score(labels, pred)
         print('Epochs {}: train_loss: {}, accuracy: {}, f1_score: {}'.format(self.current_epoch, avg_loss, avg_acc, f1_score(labels, pred, average='macro')))
-        if self.current_epoch % 5 == 0 and self.current_epoch > 0:
+        if (self.current_epoch % 5 == 0 and self.current_epoch > 0):
             print(confusion_matrix(labels, pred))
 
         
@@ -197,38 +208,6 @@ class SimpleClassifier(pl.LightningModule):
             print(confusion_matrix(labels, pred))
         
     
-        
-class ImportantEvaluate(nn.Module):
-    def __init__(self, embedding_dim: int, output_dim: int, dropout:float= 0.1):
-        super().__init__()
-        self.conv =nn.Sequential(
-                nn.Conv1d(in_channels= embedding_dim, out_channels= 64, kernel_size= 3, padding= 1),
-                nn.BatchNorm1d(64),
-                nn.Conv1d(64,32,3, padding= 1),
-                nn.BatchNorm1d(32),
-            ) 
-        
-        self.lstm = nn.LSTM(batch_first= True, input_size = 32, hidden_size = 32)
-        
-        self.fc = nn.Sequential(
-            nn.Dropout(dropout),
-            nn.Linear(32, output_dim),
-            nn.ReLU()
-            )
-    
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        r"""[evaluate the importance of a batch of sequences of words in determining the label of the text]
-
-        Args:
-            x (torch.Tensor): [shape [num_sequences, sequence_length, embedding_dim]]
-
-        Returns:
-            torch.Tensor: [shape [num_sequences, output_dim]]
-        """
-        out = self.conv(torch.moveaxis(x, 1, 2))
-        out = self.lstm(torch.moveaxis(out, 1, 2))
-        out = self.fc(out)
-        return out
         
 
         
