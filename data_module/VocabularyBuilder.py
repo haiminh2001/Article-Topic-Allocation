@@ -1,9 +1,8 @@
+from transformers.utils.dummy_pt_objects import RagSequenceForGeneration
 from vncorenlp import VnCoreNLP
 import os
 import pickle
 from tqdm import tqdm
-import torch
-from torch.nn import functional as F
 path = os.path.dirname(os.path.abspath(__file__))
 
 from itertools import islice
@@ -64,3 +63,11 @@ class VocabBuilder:
     
     def tokenize(self, sequence: str):
         return self.annotator.tokenize(sequence)
+    
+    def decode(self, texts: list, max_vocab_length:int):
+        self.list = take(max_vocab_length, self.vocab.items())
+        rs = ''
+        for word in texts:
+            rs += self.list[word][0] + ' '
+            
+        return rs
