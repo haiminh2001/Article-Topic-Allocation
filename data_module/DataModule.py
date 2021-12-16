@@ -138,15 +138,14 @@ class InferenceDataset(Dataset):
         return self.labels
 
 class ClassifierInputDataset(Dataset):
-    def __init__(self, input_tensor: torch.Tensor, text_ends: list, labels: torch.Tensor = None):
+    def __init__(self, input_tensor: torch.Tensor, text_ends: list, labels: torch.Tensor = None, max_length:int = 512):
         self.labels = labels
         super(ClassifierInputDataset, self).__init__()
         self.texts = []
-        self.max_length = 0
+        self.max_length = max_length
         for i in range(1, len(text_ends)):
             self.texts.append(torch.clone(input_tensor[text_ends[i - 1] : text_ends[i]]).detach())       
             l =  text_ends[i] - text_ends[i - 1]
-            self.max_length = l if l > self.max_length else self.max_length
     
     def __len__(self):
         return len(self.texts)
@@ -159,6 +158,8 @@ class ClassifierInputDataset(Dataset):
         tensor = self.texts[index]
         if tensor.shape[0] < self.max_length:
             tensor = torch.cat((torch.full((self.max_length - tensor.shape[0], tensor.shape[1]), 0), tensor))
+        else:
+            tensor = tensor[:self.max_length]
         if self.labels:
             
             return tensor, self.labels[index]
