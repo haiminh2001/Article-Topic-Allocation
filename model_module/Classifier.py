@@ -1,18 +1,15 @@
-from urllib.parse import uses_relative
-from pytorch_lightning import trainer
+
 import torch
 import pytorch_lightning as pl
-from torch.nn.modules import dropout
-from torch.serialization import load
-from data_module import ClassifierInputDataset, DataHolder, data
+from data_module import ClassifierInputDataset
 from os.path import dirname, abspath
 import pickle
 import os
 from torch.utils.data import DataLoader
 from torch import nn
-from torch.nn.functional import embedding, one_hot, cross_entropy
+from torch.nn.functional import one_hot, cross_entropy
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
-
+from transformers import BertModel, BertConfig
 
 dir_path = dirname(dirname(abspath(__file__)))
 tensors_folder = '/data_module/saved_data/temp_tensors'
@@ -35,12 +32,14 @@ class Classifier():
                  use_lr_finder:bool = True,
                  load_classifier:bool= False,
                  cfg_optimizer:bool= False,
+                 classifier_model:str= 'simple',
                  ):
         super(Classifier, self).__init__()
         self.use_lr_finder= use_lr_finder
         self.num_train_datasets = 0
         self.num_test_datasets = 0
         self.count_dataset()
+        self.classifier_model = classifier_model
         print('Collecting data information...')
         if load_classifier:
             if cfg_optimizer:
@@ -51,10 +50,12 @@ class Classifier():
                           train_batch_size= train_batch_size,
                           eval_batch_size= eval_batch_size,
                           )
+                
             else:
                 self.load()
                 self.gpus = gpus
-                self.hprams = None
+            self.hprams = None
+            
         else:
             self.hprams = locals()
             del self.hprams['load_classifier']
@@ -129,7 +130,11 @@ class Classifier():
                 self.num_test_datasets+= 1
     
     def setup_model(self):
-        self.classifier = SimpleClassifier(self.embedding_dim, num_labels, lr= self.lr, eps = self.eps)
+        if self.classifier_model == 'simple':
+            self.classifier = SimpleClassifier(self.embedding_dim, num_labels, lr= self.lr, eps = self.eps)
+        if self.classifier_model == 'bert':
+            self.classifier = Bert(self.embedding_dim, num_labels, lr= self.lr, eps = self.eps)
+            
     
     def setup_trainer(self, gpus, epochs):
         self.trainer = pl.Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None, log_every_n_steps= 1, num_sanity_val_steps=0)
@@ -210,15 +215,11 @@ class SimpleClassifier(pl.LightningModule):
         super().__init__()
         input_size = embedding_dim
         self.cnn = nn.Sequential(
-            nn.Conv1d(in_channels = input_size, out_channels = input_size, kernel_size = 3, padding = 1, stride = 2),
+            nn.Conv1d(in_channels = input_size, out_channels = input_size, kernel_size = 3, padding = 1, stride = 1),
             nn.ReLU(),
             nn.BatchNorm1d(input_size),
             nn.AvgPool1d(2),
-            nn.Conv1d(in_channels = input_size, out_channels = input_size, kernel_size = 3, padding = 1, stride = 2),
-            nn.ReLU(),
-            nn.BatchNorm1d(input_size),
-            nn.AvgPool1d(2),
-            nn.Conv1d(in_channels = input_size, out_channels = input_size, kernel_size = 3, padding = 1, stride = 2),
+            nn.Conv1d(in_channels = input_size, out_channels = input_size, kernel_size = 3, padding = 1, stride = 1),
             nn.ReLU(),
             nn.BatchNorm1d(input_size),
             nn.AvgPool1d(2),
@@ -240,8 +241,8 @@ class SimpleClassifier(pl.LightningModule):
         _, (hn2, _) = self.lstm2(out1)
         hn2 = hn2.view(-1, 50) #reshaping the data for Dense layer next
         out = self.relu(hn2)
-        out = self.fc1(out) #first Dense
-        return out 
+        out = self.fc1(out)
+        return out
     
     
     def training_step(self, batch, batchidx):
@@ -286,7 +287,74 @@ class SimpleClassifier(pl.LightningModule):
         if self.current_epoch % 5 == 0 and self.current_epoch > 0:
             print(confusion_matrix(labels, pred))
         
+class Bert(pl.LightningModule):
+    def __init__(self, embedding_dim:int, output_dim:int, lr:float, eps:float):
+        super(Bert, self).__init__()
+        configuration = BertConfig(hidden_size= 350, num_attention_heads= 10, intermediate_size= 1028,)
+        self.l1 = BertModel(configuration)
+        self.pre_classifier = torch.nn.Linear(350, 350)
+        self.dropout = torch.nn.Dropout(0.3)
+        self.classifier = torch.nn.Linear(350, output_dim)
+        self.lr = lr
+        self.eps = eps
     
+    def forward(self, x):
+        x = torch.transpose(x, 0, 1)
+        out = torch.mean(x[:64], dim= 0,keepdim=True)
+        for i in range(64, x.shape[0], 64):
+            end = min(i + 64, x.shape[0])
+            out = torch.cat((out, torch.mean(x[i : end], dim= 0, keepdim= True)))
+        
+        out = torch.transpose(out, 0, 1)    
+        _, out = self.l1(inputs_embeds = out, return_dict= False)
+        
+        out = self.pre_classifier(out)
+        out = self.dropout(out)
+        out = self.classifier(out)
+        return out 
+    
+    
+    def training_step(self, batch, batchidx):
+        texts, labels = batch
+        onehot = one_hot(labels, num_labels).type(torch.float)
+        pred = self(texts)
+        
+        loss = cross_entropy(pred, onehot)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        pred = torch.argmax(pred, dim=1)        
+        
+        return {'loss': loss, 'pred': pred, 'labels' : labels}
+    
+    def training_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
+        pred = torch.cat([x["pred"] for x in outputs]).squeeze().detach().cpu().numpy()
+        labels = torch.cat([x["labels"] for x in outputs]).squeeze().detach().cpu().numpy()
+        avg_acc = accuracy_score(labels, pred)
+        print('Epochs {}: train_loss: {}, accuracy: {}, f1_score: {}'.format(self.current_epoch, avg_loss, avg_acc, f1_score(labels, pred, average='macro')))
+        if (self.current_epoch % 5 == 0 and self.current_epoch > 0):
+            print(confusion_matrix(labels, pred))
+
+        
+    def configure_optimizers(self):
+      
+        optimizer = torch.optim.Adam(
+            self.parameters(),
+            lr= self.lr,
+            eps= self.eps,
+        )
+        return optimizer
+    
+    def validation_step(self, batch, batchidx):
+        return self.training_step(batch, batchidx)
+    
+    def validation_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
+        pred = torch.cat([x["pred"] for x in outputs]).squeeze().detach().cpu().numpy()
+        labels = torch.cat([x["labels"] for x in outputs]).squeeze().detach().cpu().numpy()
+        avg_acc = accuracy_score(labels, pred)
+        print('Epochs {}: val_loss: {}, accuracy: {}, f1_score: {}'.format(self.current_epoch, avg_loss, avg_acc, f1_score(labels, pred, average='macro')))
+        if self.current_epoch % 5 == 0 and self.current_epoch > 0:
+            print(confusion_matrix(labels, pred))
         
 
         
