@@ -1,4 +1,3 @@
-from transformers.utils.dummy_pt_objects import RagSequenceForGeneration
 from vncorenlp import VnCoreNLP
 import os
 import pickle
@@ -28,18 +27,36 @@ class VocabBuilder:
    
         for text in tqdm(texts, desc='Learning new vocabulary progess'):
             #remove punctuation
+            doc_dict = {}
             words = self.annotator.tokenize(text.lower())
             for list in words:
                 for word in list:
-                    df = self.vocab.get(word)
-                    if df == None:
-                        self.vocab[word] = 1
+                    tf = doc_dict.get(word)
+                    if tf == None:
+                        doc_dict[word]= 1
                     else:
-                        self.vocab[word] += 1
-                        
+                        doc_dict[word] += 1
+            for word in doc_dict.keys():
+                tf = self.vocab.get(word)
+                if tf == None:
+                    self.vocab[word] = {'tf': 1, 'df': 1}
+                else:
+                    self.vocab[word]['tf'] += doc_dict[word]
+                    self.vocab[word]['df'] += 1
+        
+        occasional_words = []
+        for word in self.vocab.keys():
+            if self.vocab[word]['df'] < 5:
+                occasional_words.append(word)
+            else:
+                self.vocab[word] = self.vocab[word]['tf']
+        
+        for word in occasional_words:
+            del self.vocab[word]
+             
         self.vocab = dict(sorted(self.vocab.items(), key=lambda x: x[1], reverse=True))   
         self.df = take(max_vocab_length, self.vocab.items())
-        self.vocab = dict([(x[0], i) for i, x in enumerate(self.df)])
+        self.vocab = dict([(x[0], i + 1) for i, x in enumerate(self.df)])
         self.df = dict(self.df)
         
         with open(path + self.vocab_file, 'wb+') as f:
