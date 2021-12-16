@@ -10,7 +10,7 @@ import pickle
 import os
 from torch.utils.data import DataLoader
 from torch import nn
-from torch.nn.functional import one_hot, cross_entropy
+from torch.nn.functional import embedding, one_hot, cross_entropy
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 
 
@@ -37,13 +37,16 @@ class Classifier():
                  cfg_optimizer:bool= False,
                  ):
         super(Classifier, self).__init__()
+        self.use_lr_finder= use_lr_finder
+        self.num_train_datasets = 0
+        self.num_test_datasets = 0
+        self.count_dataset()
         print('Collecting data information...')
         if load_classifier:
             if cfg_optimizer:
                 self.load(lr= lr,
                           eps= eps,
                           dropout= dropout,
-                          use_lr_finder= use_lr_finder,
                           valid_split= valid_split,
                           train_batch_size= train_batch_size,
                           eval_batch_size= eval_batch_size,
@@ -54,12 +57,10 @@ class Classifier():
                 self.hprams = None
         else:
             self.hprams = locals()
-            del self.hprams['load_embedder']
+            del self.hprams['load_classifier']
             del self.hprams['cfg_optimizer']
             del self.hprams['self']
-            self.num_train_datasets = 0
-            self.num_test_datasets = 0
-            self.count_dataset()
+            del self.hprams['use_lr_finder']
             self.num_workers = num_workers
             self.train_batch_size = train_batch_size
             self.eval_batch_size = eval_batch_size
@@ -86,6 +87,11 @@ class Classifier():
         valid_length = int(data_length * valid_split)
         train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [data_length - valid_length , valid_length])
         self.embedding_dim = dataset.embedding_dim
+        try:
+            self.hprams['embedding_dim'] = self.embedding_dim
+            self.hprams['output_dim']= num_labels
+        except:
+            pass
         self.train_data_loader = DataLoader(train_dataset, num_workers= self.num_workers, shuffle= True, batch_size= self.train_batch_size)
         self.valid_data_loader = DataLoader(valid_dataset, num_workers= self.num_workers, batch_size= self.eval_batch_size)
         del dataset
@@ -102,6 +108,11 @@ class Classifier():
         
         dataset= ClassifierInputDataset(input_tensor= torch.load(dir_path + tensors_folder + f'/test_tensor_dataset_{index + 1}outof{total}'), text_ends= info['text_ends'], labels= info['labels']),
         self.embedding_dim = dataset.embedding_dim
+        try:
+            self.hprams['embedding_dim'] = self.embedding_dim
+            self.hprams['output_dim']= num_labels
+        except:
+            pass
         #get tensor, labels and create dataset
         self.test_data_loader= DataLoader(
             dataset= dataset,
@@ -121,9 +132,10 @@ class Classifier():
         self.classifier = SimpleClassifier(self.embedding_dim, num_labels, lr= self.lr, eps = self.eps)
     
     def setup_trainer(self, gpus, epochs):
-        self.trainer = pl.Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None, log_every_n_steps= 1)
+        self.trainer = pl.Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None, log_every_n_steps= 1, num_sanity_val_steps=0)
     
-    def fit(self):
+    def fit(self, epochs:int= 5):
+        self.epochs = epochs
         self.setup_train_data(self.valid_split, index= 0)
         self.setup_trainer(self.gpus, self.epochs)
         if self.model_set_upped == False:
@@ -146,6 +158,8 @@ class Classifier():
                 train_dataloaders= self.train_data_loader,
                 val_dataloaders= self.valid_data_loader,
             )
+        
+        self.save()
     
     def forward(self, x):
         return self.classifier(x)
@@ -157,7 +171,7 @@ class Classifier():
             #save model hprams
             with open(dir_path + hprams_file, 'wb+') as f:
                 pickle.dump(self.hprams, f)
-        print('Saved word embedder')
+        print('Saved classifier')
         
     def load(self, **optim_params):
         print('Loading classifier...')
@@ -171,18 +185,21 @@ class Classifier():
             lr = kwargs['lr']
             eps = kwargs['eps']
             dropout = kwargs['dropout']
-            use_lr_finder= kwargs['use_lr_finder']
-            valid_split = kwargs['valid_split']
-            train_batch_size= kwargs['train_batch_size']
-            eval_batch_size = kwargs['eval_batch_size']
-            self.model =  Classifier.load_from_checkpoint(dir_path + model_file, 
+            embedding_dim = kwargs['embedding_dim']
+            output_dim = kwargs['output_dim']
+            self.num_workers = kwargs['num_workers']
+            self.train_batch_size = kwargs['train_batch_size']
+            self.eval_batch_size = kwargs['eval_batch_size']
+            self.valid_split = kwargs['valid_split']
+            self.gpus = kwargs['gpus']
+            self.model_set_upped = True
+
+            self.classifier =  SimpleClassifier.load_from_checkpoint(dir_path + model_file, 
                                                           lr= lr, 
                                                           eps= eps, 
                                                           dropout= dropout,
-                                                          use_lr_finder= use_lr_finder,
-                                                          valid_split= valid_split,
-                                                          train_batch_size= train_batch_size,
-                                                          eval_batch_size= eval_batch_size,
+                                                          embedding_dim= embedding_dim,
+                                                          output_dim= output_dim,
                                                           )
         else:
             print('No classifier found')
@@ -193,10 +210,18 @@ class SimpleClassifier(pl.LightningModule):
         super().__init__()
         input_size = embedding_dim
         self.cnn = nn.Sequential(
-            nn.Conv1d(in_channels = input_size, out_channels = input_size, kernel_size = 3, padding = 1, stride = 1),
+            nn.Conv1d(in_channels = input_size, out_channels = input_size, kernel_size = 3, padding = 1, stride = 2),
             nn.ReLU(),
             nn.BatchNorm1d(input_size),
-            nn.MaxPool1d(2),
+            nn.AvgPool1d(2),
+            nn.Conv1d(in_channels = input_size, out_channels = input_size, kernel_size = 3, padding = 1, stride = 2),
+            nn.ReLU(),
+            nn.BatchNorm1d(input_size),
+            nn.AvgPool1d(2),
+            nn.Conv1d(in_channels = input_size, out_channels = input_size, kernel_size = 3, padding = 1, stride = 2),
+            nn.ReLU(),
+            nn.BatchNorm1d(input_size),
+            nn.AvgPool1d(2),
         )
         
         self.lstm1 = nn.LSTM(input_size=input_size, hidden_size = 50, batch_first=True) #CNNLSTM
@@ -211,10 +236,8 @@ class SimpleClassifier(pl.LightningModule):
         inp = torch.moveaxis(x, 1, 2)
         inp = self.cnn(inp)
         inp = torch.moveaxis(inp, 1, 2)
-
-        self.out1, _ = self.lstm1(inp) #CNNLSTM with input, hidden, and internal state
-        self.out2, (hn2, _) = self.lstm2(self.out1)
-
+        out1, _ = self.lstm1(inp) #CNNLSTM with input, hidden, and internal state
+        _, (hn2, _) = self.lstm2(out1)
         hn2 = hn2.view(-1, 50) #reshaping the data for Dense layer next
         out = self.relu(hn2)
         out = self.fc1(out) #first Dense
@@ -225,6 +248,7 @@ class SimpleClassifier(pl.LightningModule):
         texts, labels = batch
         onehot = one_hot(labels, num_labels).type(torch.float)
         pred = self(texts)
+        
         loss = cross_entropy(pred, onehot)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         pred = torch.argmax(pred, dim=1)        
