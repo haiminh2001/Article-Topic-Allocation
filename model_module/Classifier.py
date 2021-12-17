@@ -235,7 +235,7 @@ class Classifier():
         if self.model_set_upped:
             cnn, lstm, fc, total = self.classifier.num_params
             info = 'Weights summary\n==========================================\n'
-            info += f'CNN Block: {(cnn/1e6):.1f} M\n'
+            info += f'CNN Blocks: {(cnn/1e6):.1f} M\n'
             info += f'Lstm Layers: {(lstm /1e6):.1f} M\n'
             info += f'Fully connected: {(fc /1e3):.1f} K\n'
             info += '==========================================\n'
