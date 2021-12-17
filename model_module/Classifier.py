@@ -208,7 +208,20 @@ class Classifier():
                                                           )
         else:
             print('No classifier found')
-            
+    
+    
+    def test(self):
+        self.setup_trainer(self.gpus)
+        if self.model_set_upped == False:
+                    self.setup_model()
+                    self.model_set_upped = True
+        self.classifier.train()
+        for i in range(self.num_test_datasets):
+            self.setup_test_data(index= i)
+            self.trainer.test(
+                model= self.classifier,
+                test_dataloaders= self.test_data_loader,
+            )
         
 class SimpleClassifier(pl.LightningModule):
     def __init__(self, embedding_dim:int, output_dim:int, lr:float, eps:float):
