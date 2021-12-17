@@ -14,7 +14,7 @@ from transformers import BertModel, BertConfig
 dir_path = dirname(dirname(abspath(__file__)))
 tensors_folder = '/data_module/saved_data/temp_tensors'
 info_train_file = '/data_module/saved_data/embed_train_info.pickle'
-info_test_file = '/data_module/saved_data/embed_test_info.pickle'
+info_test_file =  '/data_module/saved_data/embed_test_info.pickle'
 num_labels = 13
 hprams_file= '/data_module/saved_data/classifer_hprams.pickle'
 model_file= '/data_module/saved_data/classifier.ckpt'
@@ -105,9 +105,9 @@ class Classifier():
         #get text ends
      
         with open(dir_path + info_test_file, 'rb') as f:
-            info = pickle.load(f)[index]
+            info = pickle.load(f)[index + 1]
         
-        dataset= ClassifierInputDataset(input_tensor= torch.load(dir_path + tensors_folder + f'/test_tensor_dataset_{index + 1}outof{total}'), text_ends= info['text_ends'], labels= info['labels']),
+        dataset= ClassifierInputDataset(input_tensor= torch.load(dir_path + tensors_folder + f'/test_tensor_dataset_{index + 1}outof{total}'), text_ends= info['text_ends'], labels= info['labels'])
         self.embedding_dim = dataset.embedding_dim
         try:
             self.hprams['embedding_dim'] = self.embedding_dim
@@ -115,12 +115,13 @@ class Classifier():
         except:
             pass
         #get tensor, labels and create dataset
-        self.test_data_loader= DataLoader(
+        test_data_loader= DataLoader(
             dataset= dataset,
             num_workers= self.num_workers,
             batch_size= self.eval_batch_size,
         ) 
         del dataset
+        return test_data_loader
               
     def count_dataset(self):
         for file in os.listdir(dir_path + tensors_folder):
@@ -136,8 +137,11 @@ class Classifier():
             self.classifier = Bert(self.embedding_dim, num_labels, lr= self.lr, eps = self.eps)
             
     
-    def setup_trainer(self, gpus, epochs):
-        self.trainer = pl.Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None, log_every_n_steps= 1, num_sanity_val_steps=0)
+    def setup_trainer(self, gpus, epochs= 0):
+        if epochs ==0:
+            self.trainer = pl.Trainer(gpus = gpus, weights_summary=None, log_every_n_steps= 1, num_sanity_val_steps=0)
+        else:
+            self.trainer = pl.Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None, log_every_n_steps= 1, num_sanity_val_steps=0)
     
     def fit(self, epochs:int= 5):
         self.epochs = epochs
@@ -211,17 +215,25 @@ class Classifier():
     
     
     def test(self):
+        print('Preparing data:')
         self.setup_trainer(self.gpus)
         if self.model_set_upped == False:
                     self.setup_model()
                     self.model_set_upped = True
-        self.classifier.train()
+        self.classifier.eval()
+        dataloaders = []
         for i in range(self.num_test_datasets):
-            self.setup_test_data(index= i)
-            self.trainer.test(
+            dataloaders.append(self.setup_test_data(index= i))
+            
+        self.trainer.test(
                 model= self.classifier,
-                test_dataloaders= self.test_data_loader,
+                dataloaders= dataloaders,
             )
+    def __str__(self):
+        info = 'Weights summary\n==========================================\n'
+        info += '==========================================\n'
+        info += f'Total: {(self.classifier.num_params /1e6):.1f} M\n'
+        return info
         
 class SimpleClassifier(pl.LightningModule):
     def __init__(self, embedding_dim:int, output_dim:int, lr:float, eps:float):
@@ -245,6 +257,11 @@ class SimpleClassifier(pl.LightningModule):
         self.embedding_dim = embedding_dim
         self.lr = lr
         self.eps = eps
+    
+    @property
+    def num_params(self):
+        params = sum(p.numel() for p in self.parameters() if p.requires_grad) 
+        return params
     
     def forward(self, x):
         inp = torch.moveaxis(x, 1, 2)
@@ -278,7 +295,24 @@ class SimpleClassifier(pl.LightningModule):
         if (self.current_epoch % 5 == 0 and self.current_epoch > 0):
             print(confusion_matrix(labels, pred))
 
-        
+    def test_step(self, batch, batch_idx, dataloader_idx):
+        texts, labels = batch
+        onehot = one_hot(labels, num_labels).type(torch.float)
+        pred = self(texts)
+        loss = cross_entropy(pred, onehot)
+        self.log("loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        pred = torch.argmax(pred, dim=1)        
+        return {'loss': loss, 'pred': pred, 'labels' : labels}
+    
+    def test_epoch_end(self, outputs):
+        for i, output in enumerate(outputs):
+            avg_loss = torch.stack([x["loss"] for x in output]).mean()
+            pred = torch.cat([x["pred"] for x in output]).squeeze().detach().cpu().numpy()
+            labels = torch.cat([x["labels"] for x in output]).squeeze().detach().cpu().numpy()
+            avg_acc = accuracy_score(labels, pred)
+            print('Dataset {}: loss: {}, accuracy: {}, f1_score: {}'.format(i, avg_loss, avg_acc, f1_score(labels, pred, average='macro')))
+            print(confusion_matrix(labels, pred))
+    
     def configure_optimizers(self):
       
         optimizer = torch.optim.Adam(
