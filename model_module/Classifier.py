@@ -7,7 +7,7 @@ import pickle
 import os
 from torch.utils.data import DataLoader
 from torch import nn
-from torch.nn.functional import one_hot, cross_entropy
+from torch.nn.functional import dropout, one_hot, cross_entropy
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 from transformers import BertModel, BertConfig
 
@@ -150,6 +150,7 @@ class Classifier():
         if self.model_set_upped == False:
                     self.setup_model()
                     self.model_set_upped = True
+                    print(self)
         self.classifier.train()
         if self.use_lr_finder:
             
@@ -220,6 +221,7 @@ class Classifier():
         if self.model_set_upped == False:
                     self.setup_model()
                     self.model_set_upped = True
+                    print(self)
         self.classifier.eval()
         dataloaders = []
         for i in range(self.num_test_datasets):
@@ -230,38 +232,106 @@ class Classifier():
                 dataloaders= dataloaders,
             )
     def __str__(self):
-        info = 'Weights summary\n==========================================\n'
-        info += '==========================================\n'
-        info += f'Total: {(self.classifier.num_params /1e6):.1f} M\n'
-        return info
+        if self.model_set_upped:
+            cnn, lstm, fc, total = self.classifier.num_params
+            info = 'Weights summary\n==========================================\n'
+            info += f'CNN Block: {(cnn/1e6):.1f} M\n'
+            info += f'Lstm Layers: {(lstm /1e6):.1f} M\n'
+            info += f'Fully connected: {(fc /1e3):.1f} K\n'
+            info += '==========================================\n'
+            info += f'Total: {(total /1e6):.1f} M\n'
+            return info
+        else:
+            return 'Model has not initialized yet!'
+       
+        
+class DenseBlock(nn.Module):
+    def __init__(self, input_size):
+        super(DenseBlock, self).__init__()
+        self.cnn1 = nn.Sequential(
+            nn.BatchNorm1d(input_size),
+            nn.ReLU(),
+            nn.Conv1d(input_size, input_size, kernel_size= 1, stride= 1),
+        )
+        self.cnn2 = nn.Sequential(
+            nn.BatchNorm1d(input_size),
+            nn.ReLU(),
+            nn.Conv1d(input_size, input_size, kernel_size= 1, stride= 1),
+        )
+        self.cnn3 = nn.Sequential(
+            nn.BatchNorm1d(input_size),
+            nn.ReLU(),
+            nn.Conv1d(input_size, input_size, kernel_size= 1, stride= 1),
+        )
+    
+    def forward(self, x):
+        x1 = self.cnn1(x)
+        x2 = self.cnn2(x + x1)
+        x3 = self.cnn3(x + x1 + x2)
+        del x1
+        del x2
+        return x3
+
+class ReductionBlock(nn.Module):
+    def __init__(self, input_size):
+        super(ReductionBlock, self).__init__()
+        self.cnn1 = nn.Sequential(
+            nn.BatchNorm1d(input_size),
+            nn.ReLU(),
+            nn.Conv1d(input_size, input_size, kernel_size= 1, stride= 1),
+        )
+        self.cnn2 = nn.Sequential(
+            nn.BatchNorm1d(input_size),
+            nn.ReLU(),
+            nn.Conv1d(input_size, input_size, kernel_size= 1, stride= 1),
+        )
+        self.cnn3 = nn.Sequential(
+            nn.BatchNorm1d(input_size),
+            nn.ReLU(),
+            nn.Conv1d(input_size,int( input_size / 2), kernel_size= 1, stride= 1),
+        )
+        self.pooling = nn.AvgPool1d(2)
+    
+    def forward(self, x):
+        x1 = self.cnn1(x)
+        x2 = self.cnn2(x + x1)
+        x3 = self.cnn3(x + x1 + x2)
+        x3 = self.pooling(x3)
+        del x1
+        del x2
+        return x3
         
 class SimpleClassifier(pl.LightningModule):
     def __init__(self, embedding_dim:int, output_dim:int, lr:float, eps:float):
         super().__init__()
-        input_size = embedding_dim
+        buffer1 = int(embedding_dim / 2)
+        buffer2 = int(buffer1 / 2)
         self.cnn = nn.Sequential(
-            nn.Conv1d(in_channels = input_size, out_channels = input_size, kernel_size = 3, padding = 1, stride = 1),
-            nn.ReLU(),
-            nn.BatchNorm1d(input_size),
-            nn.AvgPool1d(2),
-            nn.Conv1d(in_channels = input_size, out_channels = input_size, kernel_size = 3, padding = 1, stride = 1),
-            nn.ReLU(),
-            nn.BatchNorm1d(input_size),
-            nn.AvgPool1d(2),
+            DenseBlock(embedding_dim),
+            DenseBlock(embedding_dim),
+            ReductionBlock(embedding_dim),
+            DenseBlock(buffer1),
+            DenseBlock(buffer1),
+            ReductionBlock(buffer1),
         )
         
-        self.lstm1 = nn.LSTM(input_size=input_size, hidden_size = 50, batch_first=True) #CNNLSTM
-        self.lstm2 =  nn.LSTM(input_size = 50, hidden_size = 50, batch_first = True)
-        self.fc1 = nn.Linear(50, output_dim) #fully connected last layer
-        self.relu = nn.ReLU()
+        self.lstm1 = nn.LSTM(input_size=buffer2, hidden_size = 768, batch_first=True, dropout= 0.1, num_layers= 3)
+        self.lstm2 =  nn.LSTM(input_size = 768, hidden_size = 100, batch_first = True, dropout= 0.1)
+        self.fc = nn.Sequential(
+            nn.Linear(100, output_dim),
+            nn.ReLU(),
+        )
         self.embedding_dim = embedding_dim
         self.lr = lr
         self.eps = eps
     
     @property
     def num_params(self):
-        params = sum(p.numel() for p in self.parameters() if p.requires_grad) 
-        return params
+        cnn_params = sum(p.numel() for p in self.cnn.parameters() if p.requires_grad) 
+        lstm_params = sum(p.numel() for p in self.lstm1.parameters() if p.requires_grad) + sum(p.numel() for p in self.lstm2.parameters() if p.requires_grad) 
+        fc_params = sum(p.numel() for p in self.fc.parameters() if p.requires_grad) 
+        total_params = cnn_params + lstm_params + fc_params
+        return cnn_params, lstm_params, fc_params, total_params
     
     def forward(self, x):
         inp = torch.moveaxis(x, 1, 2)
@@ -269,9 +339,8 @@ class SimpleClassifier(pl.LightningModule):
         inp = torch.moveaxis(inp, 1, 2)
         out1, _ = self.lstm1(inp) #CNNLSTM with input, hidden, and internal state
         _, (hn2, _) = self.lstm2(out1)
-        hn2 = hn2.view(-1, 50) #reshaping the data for Dense layer next
-        out = self.relu(hn2)
-        out = self.fc1(out)
+        hn2 = hn2.view(-1, 100) #reshaping the data for Dense layer next
+        out = self.fc(hn2)
         return out
     
     
