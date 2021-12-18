@@ -1,26 +1,21 @@
 
 import torch
 import pytorch_lightning as pl
-from torch.utils.data.dataset import Dataset
+from data_module import ClassifierInputDataset
 from os.path import dirname, abspath
 import pickle
-import numpy as np
+import os
 from torch.utils.data import DataLoader
 from torch import nn
-from torch.nn.functional import one_hot, cross_entropy
+from torch.nn.functional import dropout, one_hot, cross_entropy
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 from transformers import BertModel, BertConfig
-
-from data_module.VocabularyBuilder import VocabBuilder
-from .WordEmbedding import WordEmbedder
-from tqdm import tqdm
-import string
-from sklearn.preprocessing import LabelEncoder
 
 dir_path = dirname(dirname(abspath(__file__)))
 tensors_folder = '/data_module/saved_data/temp_tensors'
 info_train_file = '/data_module/saved_data/embed_train_info.pickle'
 info_test_file =  '/data_module/saved_data/embed_test_info.pickle'
+num_labels = 13
 hprams_file= '/data_module/saved_data/classifer_hprams.pickle'
 model_file= '/data_module/saved_data/classifier.ckpt'
 
@@ -38,18 +33,13 @@ class Classifier():
                  load_classifier:bool= False,
                  cfg_optimizer:bool= False,
                  classifier_model:str= 'simple',
-                 word_embedder: WordEmbedder= None,
-                 num_labels: int= 13,
-                 max_length: int = 512,
-                 vocab_builder: VocabBuilder= None,
                  ):
         super(Classifier, self).__init__()
         self.use_lr_finder= use_lr_finder
+        self.num_train_datasets = 0
+        self.num_test_datasets = 0
+        self.count_dataset()
         self.classifier_model = classifier_model
-        self.le = None
-        self.vocab_builder = vocab_builder
-        self.max_vocab_length = word_embedder.max_vocab_length
-        self.embedding_dim = word_embedder.embedding_dim
         print('Collecting data information...')
         if load_classifier:
             if cfg_optimizer:
@@ -67,18 +57,11 @@ class Classifier():
             self.hprams = None
             
         else:
-            self.embedding = word_embedder.model.encode
-            self.window_size = word_embedder.window_size
             self.hprams = locals()
             del self.hprams['load_classifier']
             del self.hprams['cfg_optimizer']
             del self.hprams['self']
             del self.hprams['use_lr_finder']
-            del self.hprams['word_embedder']
-            del self.hprams['vocab_builder']
-            self.max_length = max_length
-            self.num_labels = num_labels
-            self.hprams['window_size'] = self.window_size
             self.num_workers = num_workers
             self.train_batch_size = train_batch_size
             self.eval_batch_size = eval_batch_size
@@ -88,16 +71,70 @@ class Classifier():
             self.lr = lr
             self.eps = eps
             self.gpus = gpus
+    
+    def setup_train_data(self, valid_split:float= 0.2, index:int= 0):
+        
+        total = self.num_train_datasets 
+        print(f'Dataset{index + 1}/{total}')
+        #get text ends
+     
+        with open(dir_path + info_train_file, 'rb') as f:
+            info = pickle.load(f)[index + 1]
 
+        
+        #get tensor, labels and create dataset
+        dataset= ClassifierInputDataset(input_tensor= torch.load(dir_path + tensors_folder + f'/train_tensor_dataset_{index + 1}outof{total}'), text_ends= info['text_ends'], labels= info['labels'])
+        data_length = dataset.__len__()
+        valid_length = int(data_length * valid_split)
+        train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [data_length - valid_length , valid_length])
+        self.embedding_dim = dataset.embedding_dim
+        try:
+            self.hprams['embedding_dim'] = self.embedding_dim
+            self.hprams['output_dim']= num_labels
+        except:
+            pass
+        self.train_data_loader = DataLoader(train_dataset, num_workers= self.num_workers, shuffle= True, batch_size= self.train_batch_size)
+        self.valid_data_loader = DataLoader(valid_dataset, num_workers= self.num_workers, batch_size= self.eval_batch_size)
+        del dataset
+        del train_dataset
+        del valid_dataset
+    
+    def setup_test_data(self, index: int= 0):    
+        total = self.num_test_datasets 
+        print(f'Dataset: {index + 1}/{total}')
+        #get text ends
+     
+        with open(dir_path + info_test_file, 'rb') as f:
+            info = pickle.load(f)[index + 1]
+        
+        dataset= ClassifierInputDataset(input_tensor= torch.load(dir_path + tensors_folder + f'/test_tensor_dataset_{index + 1}outof{total}'), text_ends= info['text_ends'], labels= info['labels'])
+        self.embedding_dim = dataset.embedding_dim
+        try:
+            self.hprams['embedding_dim'] = self.embedding_dim
+            self.hprams['output_dim']= num_labels
+        except:
+            pass
+        #get tensor, labels and create dataset
+        test_data_loader= DataLoader(
+            dataset= dataset,
+            num_workers= self.num_workers,
+            batch_size= self.eval_batch_size,
+        ) 
+        del dataset
+        return test_data_loader
+              
+    def count_dataset(self):
+        for file in os.listdir(dir_path + tensors_folder):
+            if 'train_tensor' in file:
+                self.num_train_datasets+= 1
+            if 'test_tensor' in file:
+                self.num_test_datasets+= 1
+    
     def setup_model(self):
         if self.classifier_model == 'simple':
-            self.classifier = SimpleClassifier(embedding_dim = self.embedding_dim, output_dim= self.num_labels, lr= self.lr, eps = self.eps, winddow_size= self.window_size)
+            self.classifier = SimpleClassifier(self.embedding_dim, num_labels, lr= self.lr, eps = self.eps)
         if self.classifier_model == 'bert':
-            self.classifier = Bert(self.embedding_dim, self.num_labels, lr= self.lr, eps = self.eps)
-        self.classifier.add_module('embedding', self.embedding)
-        del self.embedding
-        self.model_set_upped= True
-        print(self)
+            self.classifier = Bert(self.embedding_dim, num_labels, lr= self.lr, eps = self.eps)
             
     
     def setup_trainer(self, gpus, epochs= 0):
@@ -105,39 +142,32 @@ class Classifier():
             self.trainer = pl.Trainer(gpus = gpus, weights_summary=None, log_every_n_steps= 1, num_sanity_val_steps=0)
         else:
             self.trainer = pl.Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None, log_every_n_steps= 1, num_sanity_val_steps=0)
-            
-            
-    def setup_dataloaders(self, input_ids, labels, batch_size:int= 256, shuffle:bool = True, valid_split:float= 0):
-        dataset = SimpleDataset(input_ids= input_ids, labels= labels)
-        if valid_split == 0:
-            return DataLoader(dataset= dataset, batch_size= batch_size, num_workers= self.num_workers, shuffle= shuffle, pin_memory= True)
-        else:
-            data_length = dataset.__len__()
-            valid_length = int(data_length * valid_split)
-            train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [data_length - valid_length , valid_length])
-            return DataLoader(dataset= train_dataset, batch_size= batch_size, num_workers= self.num_workers, shuffle= True, pin_memory= True), DataLoader(dataset= valid_dataset, batch_size= self.eval_batch_size, num_workers= self.num_workers, shuffle= False, pin_memory= True)
     
-    def fit(self, input_ids: torch.Tensor, labels: torch.Tensor, epochs:int= 5, valid_split:float= 0.2):
+    def fit(self, epochs:int= 5):
         self.epochs = epochs
+        self.setup_train_data(self.valid_split, index= 0)
         self.setup_trainer(self.gpus, self.epochs)
         if self.model_set_upped == False:
                     self.setup_model()
                     self.model_set_upped = True
-        self.classifier.train_mode()
-
-        train_data_loader, valid_data_loader = self.setup_dataloaders(input_ids= input_ids, labels= labels, batch_size= self.train_batch_size, shuffle= True, valid_split= valid_split)
+                    print(self)
+        self.classifier.train()
         if self.use_lr_finder:
-            lr_finder= self.trainer.tuner.lr_find(self.classifier, train_dataloaders= train_data_loader)
+            
+            lr_finder= self.trainer.tuner.lr_find(self.classifier, train_dataloaders= self.train_data_loader)
             self.classifier.lr = lr_finder.suggestion()
             print(f'Learning rate= {self.classifier.lr}')
+            
+        for i in range(self.num_train_datasets):
+            if i !=0:
+                self.setup_train_data(self.valid_split, index= i)
+                self.setup_trainer(self.gpus, self.epochs)
         
-
-        
-        self.trainer.fit(
-            model= self.classifier,
-            train_dataloaders= train_data_loader,
-            val_dataloaders= valid_data_loader,
-        )
+            self.trainer.fit(
+                model= self.classifier,
+                train_dataloaders= self.train_data_loader,
+                val_dataloaders= self.valid_data_loader,
+            )
         
         self.save()
     
@@ -147,7 +177,6 @@ class Classifier():
     def save(self):
         #save network
         self.trainer.save_checkpoint(dir_path + model_file, weights_only= True)
-
         if self.hprams:
             #save model hprams
             with open(dir_path + hprams_file, 'wb+') as f:
@@ -173,9 +202,6 @@ class Classifier():
             self.eval_batch_size = kwargs['eval_batch_size']
             self.valid_split = kwargs['valid_split']
             self.gpus = kwargs['gpus']
-            self.window_size = kwargs['window_size']
-            self.num_labels = kwargs['num_labels']
-            self.max_length = kwargs['max_length']
             self.model_set_upped = True
 
             self.classifier =  SimpleClassifier.load_from_checkpoint(dir_path + model_file, 
@@ -184,93 +210,40 @@ class Classifier():
                                                           dropout= dropout,
                                                           embedding_dim= embedding_dim,
                                                           output_dim= output_dim,
-                                                          num_labels= self.num_labels,
                                                           )
         else:
             print('No classifier found')
     
     
-    def test(self, input_ids: torch.Tensor, labels: torch.Tensor):
+    def test(self):
+        print('Preparing data:')
         self.setup_trainer(self.gpus)
         if self.model_set_upped == False:
                     self.setup_model()
                     self.model_set_upped = True
-        self.classifier.eval_mode()
+                    print(self)
+        self.classifier.eval()
+        dataloaders = []
+        for i in range(self.num_test_datasets):
+            dataloaders.append(self.setup_test_data(index= i))
             
         self.trainer.test(
                 model= self.classifier,
-                dataloaders= self.setup_dataloaders(input_ids= input_ids, labels= labels, batch_size= self.eval_batch_size, shuffle= False),
+                dataloaders= dataloaders,
             )
-        
     def __str__(self):
         if self.model_set_upped:
-            cnn, lstm, fc, embedding, total = self.classifier.num_params
+            cnn, lstm, fc, total = self.classifier.num_params
             info = 'Weights summary\n==========================================\n'
-            info += f'Input Embedding: {(embedding/1e6):.1f} M\n'
             info += f'CNN Blocks: {(cnn/1e6):.1f} M\n'
             info += f'Lstm Layers: {(lstm /1e6):.1f} M\n'
             info += f'Fully connected: {(fc /1e3):.1f} K\n'
             info += '==========================================\n'
-            info += f'Total: {((total) /1e6):.1f} M\n'
-            return info 
+            info += f'Total: {(total /1e6):.1f} M\n'
+            return info
         else:
             return 'Model has not initialized yet!'
-        
-    def tokenize(self, texts: list, labels: list):
-        print('Tokenizing...')
-        self.text_ends = [0]
-        if self.le == None:
-            self.le = LabelEncoder()
-            int_labels = self.le.fit_transform(labels)
-            self.num_labels = len(list(self.le.classes_))
-        else:
-            try:
-                int_labels = self.le.transform(labels)
-            except:
-                self.le = LabelEncoder()
-                int_labels = self.le.fit_transform(labels)
-                self.num_labels = len(list(self.le.classes_))
-        text_tensors = []
-        idx =0 
-        for text in tqdm(texts):
-            #tokenize
-            sequences =[]
-            text_removed = 0
-            wordz = self.vocab_builder.tokenize(text)
-            words = []
-            for word in wordz:
-                for w in word:     
-                    words.append(w)
-            end_text = min(self.max_length, len(words))
-            for i in range (self.window_size, end_text):
-                end = min(i + self.window_size + 1, len(words))
-                sequences.append(self.transform(words[i - self.window_size : end]))
-                if sequences[-1].shape[0] < self.window_size * 2 + 1:
-                    sequences[-1] = torch.cat((sequences[-1], torch.zeros(self.window_size * 2 + 1 - sequences[-1].shape[0], sequences[-1].shape[1])))
-                    
-            if len(sequences) != 0:
-                sequences= torch.cat(sequences)
-            else:
-                int_labels = np.delete(int_labels, idx - text_removed)
-                text_removed+=1
-                idx+=1
-                continue
-            
-            if sequences.shape[0] < self.max_length * (2 * self.window_size + 1):
-                sequences = torch.cat((sequences, torch.zeros(self.max_length * (2 * self.window_size + 1) - sequences.shape[0], sequences.shape[1])))
-            text_tensors.append(sequences[:512 * (self.window_size * 2 + 1)])
-            idx+=1
-        text_tensors = torch.stack(text_tensors)
-    
-        return text_tensors.type(torch.long).squeeze(), torch.from_numpy(int_labels).type(torch.long).squeeze()
-     
        
-       
-    def transform(self, words: list):       
-        #transform into BOW form
-        bow = [torch.Tensor([self.vocab_builder.get(word, self.max_vocab_length)]).type(torch.long) for word in words]
-        bow = torch.stack(bow)
-        return bow
         
 class DenseBlock(nn.Module):
     def __init__(self, input_size):
@@ -329,10 +302,8 @@ class ReductionBlock(nn.Module):
         return x3
         
 class SimpleClassifier(pl.LightningModule):
-    def __init__(self, embedding_dim:int, output_dim:int, lr:float, eps:float, winddow_size: int):
+    def __init__(self, embedding_dim:int, output_dim:int, lr:float, eps:float):
         super().__init__()
-        self.window_size = winddow_size
-        self.num_labels = output_dim
         buffer1 = int(embedding_dim / 2)
         buffer2 = int(buffer1 / 2)
         self.cnn = nn.Sequential(
@@ -344,8 +315,8 @@ class SimpleClassifier(pl.LightningModule):
             ReductionBlock(buffer1),
         )
         
-        self.lstm1 = nn.LSTM(input_size=buffer2, hidden_size = buffer2, batch_first=True, dropout= 0.1, num_layers= 3)
-        self.lstm2 =  nn.LSTM(input_size = buffer2, hidden_size = 100, batch_first = True, dropout= 0.1)
+        self.lstm1 = nn.LSTM(input_size=buffer2, hidden_size = 768, batch_first=True, dropout= 0.1, num_layers= 3)
+        self.lstm2 =  nn.LSTM(input_size = 768, hidden_size = 100, batch_first = True, dropout= 0.1)
         self.fc = nn.Sequential(
             nn.Linear(100, output_dim),
             nn.ReLU(),
@@ -354,39 +325,28 @@ class SimpleClassifier(pl.LightningModule):
         self.lr = lr
         self.eps = eps
     
-    def eval_mode(self):
-        self.eval()
-        self.embedding.eval_mode()
-    
-    def train_mode(self):
-        self.train()
-        self.embedding.train_mode()
-    
     @property
     def num_params(self):
         cnn_params = sum(p.numel() for p in self.cnn.parameters() if p.requires_grad) 
         lstm_params = sum(p.numel() for p in self.lstm1.parameters() if p.requires_grad) + sum(p.numel() for p in self.lstm2.parameters() if p.requires_grad) 
         fc_params = sum(p.numel() for p in self.fc.parameters() if p.requires_grad) 
-        embedding_params = sum(p.numel() for p in self.embedding.parameters() if p.requires_grad) 
-        total_params = cnn_params + lstm_params + fc_params + embedding_params
-        return cnn_params, lstm_params, fc_params, embedding_params, total_params
+        total_params = cnn_params + lstm_params + fc_params
+        return cnn_params, lstm_params, fc_params, total_params
     
     def forward(self, x):
-        batch_size = x.shape[0]
-        x = torch.flatten(x).reshape(-1 , 2 * self.window_size + 1)
-        inp = self.embedding(x).reshape(batch_size, -1, self.embedding_dim)
-        inp = torch.transpose(inp, 1, 2)
+        inp = torch.moveaxis(x, 1, 2)
         inp = self.cnn(inp)
-        inp = torch.transpose(inp, 1, 2)
-        out1, _ = self.lstm1(inp) 
+        inp = torch.moveaxis(inp, 1, 2)
+        out1, _ = self.lstm1(inp) #CNNLSTM with input, hidden, and internal state
         _, (hn2, _) = self.lstm2(out1)
-        hn2 = hn2.view(-1, 100) 
+        hn2 = hn2.view(-1, 100) #reshaping the data for Dense layer next
         out = self.fc(hn2)
         return out
     
+    
     def training_step(self, batch, batchidx):
         texts, labels = batch
-        onehot = one_hot(labels, self.num_labels).type(torch.float)
+        onehot = one_hot(labels, num_labels).type(torch.float)
         pred = self(texts)
         
         loss = cross_entropy(pred, onehot)
@@ -406,7 +366,7 @@ class SimpleClassifier(pl.LightningModule):
 
     def test_step(self, batch, batch_idx, dataloader_idx):
         texts, labels = batch
-        onehot = one_hot(labels, self.num_labels).type(torch.float)
+        onehot = one_hot(labels, num_labels).type(torch.float)
         pred = self(texts)
         loss = cross_entropy(pred, onehot)
         self.log("loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
@@ -472,7 +432,7 @@ class Bert(pl.LightningModule):
     
     def training_step(self, batch, batchidx):
         texts, labels = batch
-        onehot = one_hot(labels, self.num_labels).type(torch.float)
+        onehot = one_hot(labels, num_labels).type(torch.float)
         pred = self(texts)
         
         loss = cross_entropy(pred, onehot)
@@ -512,16 +472,6 @@ class Bert(pl.LightningModule):
         if self.current_epoch % 5 == 0 and self.current_epoch > 0:
             print(confusion_matrix(labels, pred))
         
-class SimpleDataset(Dataset):
-    def __init__(self, input_ids, labels):
-        super().__init__()
-        self.input_ids = input_ids
-        self.labels = labels
-    
-    def __len__(self):
-        return self.labels.shape[0]
-    
-    def __getitem__(self, index):
-        return self.input_ids[index], self.labels[index]
+
         
         
