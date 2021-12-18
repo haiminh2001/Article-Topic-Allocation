@@ -3,7 +3,7 @@
 import torch
 from torch import nn
 import pytorch_lightning as pl
-from data_module import VocabBuilder, EmbedDataset, InferenceDataset
+from data_module import VocabBuilder, EmbedDataset
 from .TransformerLayers import PositionalEncoding, MultiHeadAttention
 from pytorch_lightning import Trainer
 from torch.optim import Adam
@@ -59,7 +59,7 @@ class Encoder(nn.Module):
         self.train()
     
     
-    def forward(self, x: torch.Tensor, x0: torch.Tensor) -> torch.Tensor:
+    def forward(self, x0: torch.Tensor) -> torch.Tensor:
         r"""[Encode words into vectors]
 
         Args:
@@ -70,8 +70,8 @@ class Encoder(nn.Module):
             torch.Tensor: [sequence of vectors, shape: [num_sequences, embedding_dim]]
         """
         #dim reduction
+        x = x0[: , int(x0.shape[1] / 2)].squeeze()
         x01 = self.embedding(x0).squeeze()
-        
         #hide target or not
         hide = torch.rand(1)[0]
         if (hide < self.hide_target_rate):
@@ -133,7 +133,8 @@ class WordEmbeddingModel(pl.LightningModule):
        
     
     def training_step(self, batch, batch_idx):
-        contexts, targets = batch
+        contexts = batch
+        targets = contexts[:][int(contexts.shape[-1] / 2)].squeeze()
         out = self.encode(targets, contexts)
         prob = self.decode(targets)
         loss = F.cosine_embedding_loss(out, prob, self.target)
@@ -206,6 +207,7 @@ class WordEmbedder():
             del self.hprams['load_embedder']
             del self.hprams['cfg_optimizer']
             del self.hprams['use_lr_finder']
+            self.embedding_dim = embedding_dim
             self.window_size = window_size
             self.vocab_builder = vocab_builder
             self.max_vocab_length = max_vocab_length
@@ -230,16 +232,10 @@ class WordEmbedder():
     def setup_trainer(self, gpus, epochs):
         self.trainer = Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None, log_every_n_steps= 5)
     
-    def setup_data(self, split_index: int, texts: list, labels:list= None, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True, inference = False, dataset_splits: int = 10):
+    def setup_data(self, split_index: int, texts: list, labels:list= None, batch_size: int = 256, num_workers: int = 4, pin_memory: bool = True, dataset_splits: int = 10):
         self.count +=1
-        if inference:
-            dataset = InferenceDataset(labels= labels, split_index= split_index, dataset_splits = dataset_splits, texts = texts, vocab_builder= self.vocab_builder, max_vocab_length= self.max_vocab_length, window_size= self.window_size)
-            self.data_loader = DataLoader(dataset= dataset, batch_size= batch_size, shuffle= False, pin_memory= pin_memory, num_workers= num_workers)
-            self.text_ends = dataset.get_text_ends()
-            self.labels = dataset.get_labels()
-        else:
-            dataset = EmbedDataset(split_index= split_index, dataset_splits= dataset_splits, texts = texts, vocab_builder= self.vocab_builder, max_vocab_length= self.max_vocab_length, window_size= self.window_size)
-            self.data_loader = DataLoader(dataset= dataset, batch_size= batch_size, shuffle= True, pin_memory= pin_memory, num_workers= num_workers)
+        dataset = EmbedDataset(split_index= split_index, dataset_splits= dataset_splits, texts = texts, vocab_builder= self.vocab_builder, max_vocab_length= self.max_vocab_length, window_size= self.window_size)
+        self.data_loader = DataLoader(dataset= dataset, batch_size= batch_size, shuffle= True, pin_memory= pin_memory, num_workers= num_workers)
         
         if self.count == dataset_splits:
             del dataset
@@ -299,96 +295,14 @@ class WordEmbedder():
             hiden_target_rate = kwargs['hide_target_rate']
             num_heads = kwargs['num_heads']
             dropout = kwargs['dropout']
-            embedding_dim = kwargs['embedding_dim']
+            self.embedding_dim = kwargs['embedding_dim']
             self.max_vocab_length = max_vocab_length
             self.window_size = window_size
-            self.model =  WordEmbeddingModel.load_from_checkpoint(dir_path + model_file, max_vocab_length= max_vocab_length, lr= lr, eps= eps, window_size = window_size, hiden_target_rate= hiden_target_rate, num_heads= num_heads, dropout= dropout, embedding_dim= embedding_dim)
+            self.model =  WordEmbeddingModel.load_from_checkpoint(dir_path + model_file, max_vocab_length= max_vocab_length, lr= lr, eps= eps, window_size = window_size, hiden_target_rate= hiden_target_rate, num_heads= num_heads, dropout= dropout, embedding_dim= self.embedding_dim)
         else:
             print('No embedder found')
         
-    def embed(self, texts: list, labels: list, batch_size: int = 512, num_workers: int = 4, pin_memory: bool = True, dataset_splits: int = 1, is_train_set: bool= True, index_start: int = 1):
-        r"""[embed input texts]
-
-        Args:
-            texts (list): [list of raw texts]
-
-        Returns:
-            embedded tensors, labels saved in files
-        """
-        index_start -= 1
-        self.count = index_start
-        self.setup_trainer(gpus= self.gpus, epochs= 1)
-        self.model.cuda()
-        self.model.eval_mode()
-        self.flag = False
-        info = {}
-        #remove existed tensors
-        if is_train_set:
-            name = '/train_'
-            spare = 'test'
-        else:
-            name = '/test_'
-            spare = 'train'
-            
-        if index_start == 0:
-            try:
-                if is_train_set:
-                    os.remove(dir_path + train_info_file)
-                else:
-                    os.remove(dir_path + test_info_file)
-            except:
-                pass
-            remove_file_in_folders(dir_path + tensors_folder, spare= spare)
-        for i in range(index_start, dataset_splits):
-            #prepare data
-            self.setup_data(labels= labels, texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, inference= True, split_index= self.count, dataset_splits= dataset_splits)
-            #embed
-            words = torch.cat(self.trainer.predict(self.model, self.data_loader, return_predictions= True)).cpu()
-            info[i + 1] = {'text_ends': self.text_ends, 'labels': self.labels}
-            #save tensors
-            print(f'Saving dataset {i + 1} ...')
-            with open(dir_path + tensors_folder + name +'tensor_dataset_' + str(i + 1) + 'outof' + str(dataset_splits), 'wb+') as f:
-                torch.save(words, f)
-                del words
-            if is_train_set:
-                try:
-                    if index_start != 0:
-                        with open(dir_path + train_info_file, 'rb') as f:
-                            try:
-                                prev = pickle.load(f)
-                                for index in prev.keys():
-                                    info[index] = prev[index]
-                            except:
-                                pass
-                except:
-                    pass
-                with open(dir_path + train_info_file, 'wb+') as f:
-                    pickle.dump(info, f)
-            else:
-                try:
-                    if index_start != 0:
-                        with open(dir_path + test_info_file, 'rb') as f:
-                            try:
-                                prev = pickle.load(f)
-                                for index in prev.keys():
-                                    info[index] = prev[index]
-                            except:
-                                pass
-                except:
-                    pass
-                with open(dir_path + test_info_file, 'wb+') as f:
-                    pickle.dump(info, f)
-            print(f'Dataset{i + 1} saved')
-                
-            #if gpu run out of memory, decrease batch size by a half
-            if self.flag:
-                batch_size = batch_size / 2
-                self.flag = False
-        
-        
-        
-        
-        print('Data saved')
+   
         
         
     
