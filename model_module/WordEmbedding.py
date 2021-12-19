@@ -94,7 +94,7 @@ class Encoder(nn.Module):
         #feadforwad
         z2 = self.fc(z1)
         
-        z2 = F.softmax(z2 + z1, dim= 1)
+        z2 = z2 + z1
         
         return z2
         
@@ -106,7 +106,7 @@ class Decoder(nn.Module):
     
     def forward(self, encoded: torch.Tensor) -> torch.Tensor:
     
-        return F.softmax(self.embedding(encoded).squeeze(), dim= 1)
+        return self.embedding(encoded).squeeze()
     
 class WordEmbeddingModel(pl.LightningModule):
     def __init__(self, max_vocab_length:int, embedding_dim: int = 200, num_heads:int = 3, window_size: int = 4, dropout: float= 0.1, lr: float= 1e-4, eps: float= 1e-5, hide_target_rate: float = 0.5, **kwargs):

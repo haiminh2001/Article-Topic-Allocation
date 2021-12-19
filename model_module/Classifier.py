@@ -226,11 +226,12 @@ class Classifier():
         dataloaders = []
         for i in range(self.num_test_datasets):
             dataloaders.append(self.setup_test_data(index= i))
-            
+        
         self.trainer.test(
                 model= self.classifier,
                 dataloaders= dataloaders,
             )
+        
     def __str__(self):
         if self.model_set_upped:
             cnn, lstm, fc, total = self.classifier.num_params
@@ -364,7 +365,7 @@ class SimpleClassifier(pl.LightningModule):
         if (self.current_epoch % 5 == 0 and self.current_epoch > 0):
             print(confusion_matrix(labels, pred))
 
-    def test_step(self, batch, batch_idx, dataloader_idx):
+    def test_step(self, batch, *_):
         texts, labels = batch
         onehot = one_hot(labels, num_labels).type(torch.float)
         pred = self(texts)
@@ -374,6 +375,8 @@ class SimpleClassifier(pl.LightningModule):
         return {'loss': loss, 'pred': pred, 'labels' : labels}
     
     def test_epoch_end(self, outputs):
+        if (type(outputs[0]) != list):
+            outputs = [outputs]
         for i, output in enumerate(outputs):
             avg_loss = torch.stack([x["loss"] for x in output]).mean()
             pred = torch.cat([x["pred"] for x in output]).squeeze().detach().cpu().numpy()
