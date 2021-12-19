@@ -22,10 +22,7 @@ model_file= '/data_module/saved_data/classifier.ckpt'
 class Classifier():
     def __init__(self,
                  num_workers:int = 4, 
-                 train_batch_size:int = 256,
-                 eval_batch_size:int = 1024,
                  dropout:float = 0.1,
-                 valid_split:float = 0.2,
                  lr:float = 1e-3,
                  eps:float = 1e-5,
                  gpus:int =1, 
@@ -46,9 +43,6 @@ class Classifier():
                 self.load(lr= lr,
                           eps= eps,
                           dropout= dropout,
-                          valid_split= valid_split,
-                          train_batch_size= train_batch_size,
-                          eval_batch_size= eval_batch_size,
                           )
                 
             else:
@@ -63,10 +57,7 @@ class Classifier():
             del self.hprams['self']
             del self.hprams['use_lr_finder']
             self.num_workers = num_workers
-            self.train_batch_size = train_batch_size
-            self.eval_batch_size = eval_batch_size
             self.dropout = dropout
-            self.valid_split = valid_split
             self.model_set_upped = False
             self.lr = lr
             self.eps = eps
@@ -143,8 +134,11 @@ class Classifier():
         else:
             self.trainer = pl.Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None, log_every_n_steps= 1, num_sanity_val_steps=0)
     
-    def fit(self, epochs:int= 5):
+    def fit(self, epochs:int= 5, train_batch_size: int= 256, eval_batch_size: int = 256, valid_split:float = 0.2):
         self.epochs = epochs
+        self.train_batch_size = train_batch_size
+        self.eval_batch_size = eval_batch_size
+        self.valid_split = valid_split
         self.setup_train_data(self.valid_split, index= 0)
         self.setup_trainer(self.gpus, self.epochs)
         if self.model_set_upped == False:
@@ -198,9 +192,6 @@ class Classifier():
             embedding_dim = kwargs['embedding_dim']
             output_dim = kwargs['output_dim']
             self.num_workers = kwargs['num_workers']
-            self.train_batch_size = kwargs['train_batch_size']
-            self.eval_batch_size = kwargs['eval_batch_size']
-            self.valid_split = kwargs['valid_split']
             self.gpus = kwargs['gpus']
             self.model_set_upped = True
 
@@ -215,7 +206,8 @@ class Classifier():
             print('No classifier found')
     
     
-    def test(self):
+    def test(self, batch_size: int = 256):
+        self.eval_batch_size= batch_size
         print('Preparing data:')
         self.setup_trainer(self.gpus)
         if self.model_set_upped == False:
