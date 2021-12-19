@@ -99,23 +99,39 @@ class Encoder(nn.Module):
         return z2
         
 
-class Decoder(nn.Module):
+class TargetLearner(nn.Module):
     def __init__(self,max_vocab_length:int, embedding_dim:int, **kwargs):
-        super(Decoder, self).__init__()
+        super(TargetLearner, self).__init__()
         self.embedding = nn.Embedding(max_vocab_length, embedding_dim= embedding_dim)
     
     def forward(self, encoded: torch.Tensor) -> torch.Tensor:
     
         return self.embedding(encoded).squeeze()
+
+
+class ContextLearner(nn.Module):
+    def __init__(self,max_vocab_length:int, embedding_dim:int, sequence_length:int, **kwargs):
+        super(ContextLearner, self).__init__()
+        self.combine = nn.Sequential(
+                        nn.Linear(sequence_length, 1),
+                        nn.ReLU(),
+                        ) 
+        self.embedding = nn.Embedding(max_vocab_length, embedding_dim= embedding_dim)
     
+    def forward(self, encoded: torch.Tensor) -> torch.Tensor:
+        encoded = self.embedding(encoded).squeeze()
+        return self.combine(torch.transpose(encoded, 1 , 2)).squeeze()
+
 class WordEmbeddingModel(pl.LightningModule):
     def __init__(self, max_vocab_length:int, embedding_dim: int = 200, num_heads:int = 3, window_size: int = 4, dropout: float= 0.1, lr: float= 1e-4, eps: float= 1e-5, hide_target_rate: float = 0.5, **kwargs):
         super(WordEmbeddingModel, self).__init__()
         self.lr = lr
         self.eps = eps
         self.encode = Encoder(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, sequence_length= 2 * window_size + 1, dropout= dropout, hide_target_rate = hide_target_rate)
-        self.decode = Decoder(embedding_dim= embedding_dim, sequence_length= 2 * window_size + 1, dropout= dropout, max_vocab_length= max_vocab_length)
+        self.context_learner = ContextLearner(embedding_dim= embedding_dim, max_vocab_length= max_vocab_length, sequence_length= 2 * window_size)
+        self.target_learner = TargetLearner(embedding_dim= embedding_dim, max_vocab_length= max_vocab_length)
         self.max_vocab_length = max_vocab_length
+        self.window_size = window_size
         self.target = torch.Tensor([1]).cuda()
     
     def eval_mode(self):
@@ -135,8 +151,11 @@ class WordEmbeddingModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         contexts, targets = batch
         out = self.encode(targets, contexts)
-        prob = self.decode(targets)
-        loss = F.cosine_embedding_loss(out, prob, self.target)
+        embedded_context = self.context_learner(torch.cat((contexts[:, : self.window_size, : ], contexts[: , self.window_size + 1 : , :]), dim = 1))
+        embedded_target = self.target_learner(targets)
+        loss1 = F.cosine_embedding_loss(out, embedded_context, self.target)
+        loss2 = F.cosine_embedding_loss(out, embedded_target, self.target)
+        loss = loss1 * loss2 * 2 / (loss1 + loss2)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return {'loss': loss}
     
@@ -147,9 +166,10 @@ class WordEmbeddingModel(pl.LightningModule):
     @property
     def num_params(self):
         encode_params = sum(p.numel() for p in self.encode.parameters() if p.requires_grad) 
-        decode_params = sum(p.numel() for p in self.decode.parameters() if p.requires_grad)
-        total_params = encode_params + decode_params 
-        return encode_params, decode_params, total_params
+        context_params = sum(p.numel() for p in self.context_learner.parameters() if p.requires_grad)
+        target_params = sum(p.numel() for p in self.target_learner.parameters() if p.requires_grad)
+        total_params = encode_params + context_params + target_params 
+        return encode_params, context_params, target_params, total_params
     
     def configure_optimizers(self):
         
@@ -160,7 +180,11 @@ class WordEmbeddingModel(pl.LightningModule):
             },
             {
                 "params": p
-                    for p in self.decode.parameters()
+                    for p in self.context_learner.parameters()
+            },
+            {
+                "params": p
+                    for p in self.target_learner.parameters()
             },
         ]
         optimizer = Adam(
@@ -218,10 +242,11 @@ class WordEmbedder():
         
         
     def __str__(self) -> str:
-        encode_params, decode_params, total = self.model.num_params
+        encode_params, context_params, target_params, total = self.model.num_params
         info = 'Weights summary\n==========================================\n'
         info += f'Encoder: {(encode_params / 1e6):.1f} M\n'
-        info += f'Decoder: {(decode_params / 1e6):.1f} M\n'
+        info += f'Context Leaner: {(context_params / 1e6):.1f} M\n'
+        info += f'Target Learner: {(target_params / 1e6):.1f} M\n'
         info += '==========================================\n'
         info += f'Total: {(total /1e6):.1f} M\n'
         return info
