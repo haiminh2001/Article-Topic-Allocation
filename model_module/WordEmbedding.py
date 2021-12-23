@@ -158,7 +158,7 @@ class WordEmbeddingModel(pl.LightningModule):
         ones = torch.ones(targets.shape).cuda()
         loss1 = F.cosine_embedding_loss(out, embedded_context, self.target)
         loss2 = F.cosine_embedding_loss(out, embedded_target, target)
-        loss = 2 * (ones - loss1) * (ones - loss2) / (ones + ones - loss1 - loss2)
+        loss =ones - (2 * (ones - loss1) * (ones - loss2) / (ones + ones - loss1 - loss2))
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return {'loss': loss}
     
