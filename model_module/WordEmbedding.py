@@ -132,7 +132,8 @@ class WordEmbeddingModel(pl.LightningModule):
         self.target_learner = TargetLearner(embedding_dim= embedding_dim, max_vocab_length= max_vocab_length)
         self.max_vocab_length = max_vocab_length
         self.window_size = window_size
-        
+        self.target = torch.Tensor([1]).cuda()
+
     
     def eval_mode(self):
         self.encode.eval_mode()
@@ -154,7 +155,7 @@ class WordEmbeddingModel(pl.LightningModule):
         embedded_context = self.context_learner(torch.cat((contexts[:, : self.window_size, : ], contexts[: , self.window_size + 1 : , :]), dim = 1))
         embedded_target = self.target_learner(targets)
         target= torch.Tensor([-1 if x.item() == 0 else 1 for x in targets]).cuda()
-        loss1 = F.cosine_embedding_loss(out, embedded_context, target)
+        loss1 = F.cosine_embedding_loss(out, embedded_context, self.target)
         loss2 = F.cosine_embedding_loss(out, embedded_target, target)
         loss = loss1 * loss2 * 2 / (loss1 + loss2)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
