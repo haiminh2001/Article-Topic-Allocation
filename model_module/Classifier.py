@@ -237,7 +237,7 @@ class Classifier():
             info += f'Total: {(total /1e6):.1f} M\n'
             return info
         else:
-            return 'Model has not initialized yet!'
+            return 'Model has not been initialized yet!'
        
         
 class DenseBlock(nn.Module):
