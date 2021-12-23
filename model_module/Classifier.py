@@ -162,6 +162,8 @@ class Classifier():
                 train_dataloaders= self.train_data_loader,
                 val_dataloaders= self.valid_data_loader,
             )
+            del self.train_data_loader
+            del self.valid_data_loader
         
         self.save()
     
