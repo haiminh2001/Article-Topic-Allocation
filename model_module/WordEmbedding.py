@@ -155,10 +155,9 @@ class WordEmbeddingModel(pl.LightningModule):
         embedded_context = self.context_learner(torch.cat((contexts[:, : self.window_size, : ], contexts[: , self.window_size + 1 : , :]), dim = 1))
         embedded_target = self.target_learner(targets)
         target= torch.Tensor([-1 if x.item() == 0 else 1 for x in targets]).cuda()
-        ones = torch.ones(targets.shape).cuda()
         loss1 = F.cosine_embedding_loss(out, embedded_context, self.target)
         loss2 = F.cosine_embedding_loss(out, embedded_target, target)
-        loss =ones - (2 * (ones - loss1) * (ones - loss2) / (ones + ones - loss1 - loss2))
+        loss =1 - (2 * (1 - loss1) * (1 - loss2) / (2 - loss1 - loss2))
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return {'loss': loss}
     
