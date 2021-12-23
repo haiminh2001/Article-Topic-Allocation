@@ -24,7 +24,6 @@ class VocabBuilder:
         print(f'Have learnt {len(self.vocab)} words')
     
     def fit(self, texts: list, max_vocab_length:int= 40000):
-   
         for text in tqdm(texts, desc='Learning new vocabulary progess'):
             #remove punctuation
             doc_dict = {}
@@ -45,20 +44,20 @@ class VocabBuilder:
                     self.vocab[word]['df'] += 1
         
         occasional_words = []
+
         for word in self.vocab.keys():
             if self.vocab[word]['df'] < 5:
                 occasional_words.append(word)
             else:
                 self.vocab[word] = self.vocab[word]['tf']
-        
+        self.vocab['null_token'] = 10000000000
         for word in occasional_words:
             del self.vocab[word]
-             
+        
         self.vocab = dict(sorted(self.vocab.items(), key=lambda x: x[1], reverse=True))   
         self.df = take(max_vocab_length, self.vocab.items())
-        self.vocab = dict([(x[0], i + 1) for i, x in enumerate(self.df)])
+        self.vocab = dict([(x[0], i) for i, x in enumerate(self.df)])
         self.df = dict(self.df)
-        
         with open(path + self.vocab_file, 'wb+') as f:
             pickle.dump(self.vocab, f)
 
