@@ -8,7 +8,7 @@ import pickle
 import os
 from torch.utils.data import DataLoader
 from torch import nn
-from torch.nn.functional import dropout, one_hot, cross_entropy
+from torch.nn.functional import one_hot, cross_entropy
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 from transformers import BertModel, BertConfig
 
@@ -75,7 +75,8 @@ class Classifier():
 
         
         #get tensor, labels and create dataset
-        dataset= ClassifierInputDataset(input_tensor= torch.load(dir_path + tensors_folder + f'/train_tensor_dataset_{index + 1}outof{total}'), text_ends= info['text_ends'], labels= info['labels'])
+        feature_map = torch.load(dir_path + tensors_folder + f'/train_tensor_dataset_{index + 1}outof{total}')
+        dataset= ClassifierInputDataset(input_tensor= feature_map, text_ends= info['text_ends'], labels= info['labels'])
         data_length = dataset.__len__()
         valid_length = int(data_length * valid_split)
         train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [data_length - valid_length , valid_length])
@@ -87,6 +88,7 @@ class Classifier():
             pass
         self.train_data_loader = DataLoader(train_dataset, num_workers= self.num_workers, shuffle= True, batch_size= self.train_batch_size)
         self.valid_data_loader = DataLoader(valid_dataset, num_workers= self.num_workers, batch_size= self.eval_batch_size)
+        del feature_map
         del dataset
         del train_dataset
         del valid_dataset
@@ -173,7 +175,6 @@ class Classifier():
                 train_dataloaders= self.train_data_loader,
                 val_dataloaders= self.valid_data_loader,
             )
-            del self.trainer
             del self.train_data_loader
             del self.valid_data_loader
         
@@ -323,9 +324,9 @@ class SimpleClassifier(pl.LightningModule):
         )
         
         self.lstm1 = nn.LSTM(input_size=buffer2, hidden_size = 768, batch_first=True, dropout= 0.1, num_layers= 3)
-        self.lstm2 =  nn.LSTM(input_size = 768, hidden_size = 100, batch_first = True, dropout= 0.1)
         self.fc = nn.Sequential(
-            nn.Linear(100, output_dim),
+            nn.Dropout(0.1),
+            nn.Linear(768, output_dim),
             nn.ReLU(),
         )
         self.embedding_dim = embedding_dim
@@ -335,7 +336,7 @@ class SimpleClassifier(pl.LightningModule):
     @property
     def num_params(self):
         cnn_params = sum(p.numel() for p in self.cnn.parameters() if p.requires_grad) 
-        lstm_params = sum(p.numel() for p in self.lstm1.parameters() if p.requires_grad) + sum(p.numel() for p in self.lstm2.parameters() if p.requires_grad) 
+        lstm_params = sum(p.numel() for p in self.lstm1.parameters() if p.requires_grad)
         fc_params = sum(p.numel() for p in self.fc.parameters() if p.requires_grad) 
         total_params = cnn_params + lstm_params + fc_params
         return cnn_params, lstm_params, fc_params, total_params
@@ -344,11 +345,10 @@ class SimpleClassifier(pl.LightningModule):
         inp = torch.moveaxis(x, 1, 2)
         inp = self.cnn(inp)
         inp = torch.moveaxis(inp, 1, 2)
-        out1, _ = self.lstm1(inp) #CNNLSTM with input, hidden, and internal state
-        _, (hn2, _) = self.lstm2(out1)
-        hn2 = hn2.view(-1, 100) #reshaping the data for Dense layer next
-        out = self.fc(hn2)
-        return out
+        _, (_,inp) = self.lstm1(inp)
+        inp = torch.mean(inp, dim= 0).squeeze()
+        inp = self.fc(inp)
+        return inp
     
     
     def training_step(self, batch, batchidx):
