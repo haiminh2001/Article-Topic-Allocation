@@ -1,6 +1,7 @@
 
 import torch
 import pytorch_lightning as pl
+from torch.utils import data
 from data_module import ClassifierInputDataset
 from os.path import dirname, abspath
 import pickle
@@ -134,7 +135,7 @@ class Classifier():
         else:
             self.trainer = pl.Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None, log_every_n_steps= 1, num_sanity_val_steps=0)
     
-    def fit(self, epochs:int= 5, train_batch_size: int= 256, eval_batch_size: int = 256, valid_split:float = 0.2):
+    def fit(self, epochs:int= 5, train_batch_size: int= 256, eval_batch_size: int = 256, valid_split:float = 0.2, datasets:list = None):
         self.epochs = epochs
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
@@ -151,9 +152,19 @@ class Classifier():
             lr_finder= self.trainer.tuner.lr_find(self.classifier, train_dataloaders= self.train_data_loader)
             self.classifier.lr = lr_finder.suggestion()
             print(f'Learning rate= {self.classifier.lr}')
-            
-        for i in range(self.num_train_datasets):
+        
+        inputs = datasets if datasets else range(self.num_train_datasets)
+        for i in inputs:
             if i !=0:
+                if datasets:
+                    i-=1
+                    if i == 0:
+                        self.trainer.fit(
+                            model= self.classifier,
+                            train_dataloaders= self.train_data_loader,
+                            val_dataloaders= self.valid_data_loader,
+                        )
+                        continue
                 self.setup_train_data(self.valid_split, index= i)
                 self.setup_trainer(self.gpus, self.epochs)
         
@@ -162,6 +173,9 @@ class Classifier():
                 train_dataloaders= self.train_data_loader,
                 val_dataloaders= self.valid_data_loader,
             )
+            del self.trainer
+            del self.train_data_loader
+            del self.valid_data_loader
         
         self.save()
     
@@ -356,6 +370,7 @@ class SimpleClassifier(pl.LightningModule):
         print('Epochs {}: train_loss: {}, accuracy: {}, f1_score: {}'.format(self.current_epoch, avg_loss, avg_acc, f1_score(labels, pred, average='macro')))
         if (self.current_epoch % 5 == 0 and self.current_epoch > 0):
             print(confusion_matrix(labels, pred))
+        del pred, labels, avg_loss, avg_acc
 
     def test_step(self, batch, *_):
         texts, labels = batch
