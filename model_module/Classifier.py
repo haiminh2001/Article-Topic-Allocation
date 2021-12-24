@@ -310,8 +310,8 @@ class SimpleClassifier(pl.LightningModule):
             ReductionBlock(buffer1),
         )
         
-        self.lstm1 = nn.LSTM(input_size=buffer2, hidden_size = 768, batch_first=True)
-        self.lstm2 =  nn.LSTM(input_size = 768, hidden_size = 100, batch_first = True)
+        self.lstm1 = nn.LSTM(input_size=buffer2, hidden_size = 768, batch_first=True, dropout= 0.1, num_layers= 3)
+        self.lstm2 =  nn.LSTM(input_size = 768, hidden_size = 100, batch_first = True, dropout= 0.1)
         self.fc = nn.Sequential(
             nn.Linear(100, output_dim),
             nn.ReLU(),

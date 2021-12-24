@@ -34,19 +34,19 @@ tensors_folder = '/data_module/saved_data/temp_tensors'
 class Encoder(nn.Module):
     def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1, hide_target_rate: float = 0.5  ,**kwargs):
         super(Encoder, self).__init__()
-        self.embedding = nn.Embedding(max_vocab_length, embedding_dim)        
+        self.embedding = nn.Embedding(padding_idx= 0,  num_embeddings= max_vocab_length, embedding_dim= embedding_dim)        
         self.pe = PositionalEncoding(embedding_dim, sequence_length) 
         self.mha = MultiHeadAttention(embedding_dim, num_heads= num_heads)
         self.fc = nn.Sequential(
             nn.Linear(embedding_dim, embedding_dim),
-            nn.ReLU(),
             nn.Dropout(p= dropout),
+            nn.ReLU(),
         )
         self.combine = nn.Sequential(
             nn.Linear(sequence_length, 1),
             nn.ReLU(),
-            nn.Dropout(p= dropout),
         )
+
         self.hide_target_rate = hide_target_rate
         self.save_hide_target_rate = hide_target_rate
         
@@ -75,7 +75,7 @@ class Encoder(nn.Module):
         #hide target or not
         hide = torch.rand(1)[0]
         if (hide < self.hide_target_rate):
-            x1 = torch.zeros(x.shape[0], x01.shape[-1]).cuda()
+            x1 = self.embedding(torch.zeros(x.shape[0]).type(torch.long).cuda())
         else:
             x1 = self.embedding(x).squeeze()
         
@@ -89,24 +89,27 @@ class Encoder(nn.Module):
         z1 = self.combine(torch.transpose(z1, 1, 2)).squeeze()
 
         #add and normalize
-        z1 = F.normalize(z1 + x1, dim= 1)
-        
+        z1 = F.normalize(z1 + x1)
         #feadforwad
         z2 = self.fc(z1)
         
-        z2 = z2 + z1
+        z2 = F.normalize(z2 + z1)
         
-        return z2
+        return z2 
         
 
 class TargetLearner(nn.Module):
     def __init__(self,max_vocab_length:int, embedding_dim:int, **kwargs):
         super(TargetLearner, self).__init__()
-        self.embedding = nn.Embedding(max_vocab_length, embedding_dim= embedding_dim)
-    
+        self.embedding = nn.Embedding(padding_idx= 0, num_embeddings= max_vocab_length, embedding_dim= embedding_dim)
+        self.fc = nn.Sequential(
+            nn.Linear(embedding_dim, embedding_dim),
+            nn.ReLU(),
+        )
+
     def forward(self, encoded: torch.Tensor) -> torch.Tensor:
     
-        return self.embedding(encoded).squeeze()
+        return F.normalize(self.fc(self.embedding(encoded).squeeze()) )
 
 
 class ContextLearner(nn.Module):
@@ -116,11 +119,15 @@ class ContextLearner(nn.Module):
                         nn.Linear(sequence_length, 1),
                         nn.ReLU(),
                         ) 
-        self.embedding = nn.Embedding(max_vocab_length, embedding_dim= embedding_dim)
+        self.embedding = nn.Embedding(padding_idx= 0, num_embeddings= max_vocab_length, embedding_dim= embedding_dim)
+        self.fc = nn.Sequential(
+            nn.Linear(embedding_dim, embedding_dim),
+            nn.ReLU(),
+        )
     
     def forward(self, encoded: torch.Tensor) -> torch.Tensor:
         encoded = self.embedding(encoded).squeeze()
-        return self.combine(torch.transpose(encoded, 1 , 2)).squeeze()
+        return F.normalize(self.fc(self.combine(torch.transpose(encoded, 1 , 2)).squeeze()))
 
 class WordEmbeddingModel(pl.LightningModule):
     def __init__(self, max_vocab_length:int, embedding_dim: int = 200, num_heads:int = 3, window_size: int = 4, dropout: float= 0.1, lr: float= 1e-4, eps: float= 1e-5, hide_target_rate: float = 0.5, **kwargs):
@@ -157,8 +164,8 @@ class WordEmbeddingModel(pl.LightningModule):
         target= torch.Tensor([-1 if x.item() == 0 else 1 for x in targets]).cuda()
         loss1 = F.cosine_embedding_loss(out, embedded_context, self.target)
         loss2 = F.cosine_embedding_loss(out, embedded_target, target)
-        loss =1 - (2 * (1 - loss1) * (1 - loss2) / (2 - loss1 - loss2))
-        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        loss = 1 - (2 * (1 - loss1) * (1 - loss2) / (2 - loss1 - loss2))
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return {'loss': loss}
     
     def training_epoch_end(self, outputs):
