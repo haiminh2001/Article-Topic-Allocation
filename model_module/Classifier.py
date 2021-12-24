@@ -191,7 +191,7 @@ class Classifier():
             with open(dir_path + hprams_file, 'wb+') as f:
                 pickle.dump(self.hprams, f)
         print('Saved classifier')
-        
+         
     def load(self, **optim_params):
         print('Loading classifier...')
         kwargs = None
