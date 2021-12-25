@@ -200,7 +200,7 @@ class Classifier():
                     update_data = True
             if update_data:
                 self.setup_train_data(valid_split= self.valid_split, index = i - 1)
-                self.setup_trainer()
+                self.setup_trainer(self.gpus, self.epochs)
         
             self.trainer.fit(
                 model= self.classifier,
