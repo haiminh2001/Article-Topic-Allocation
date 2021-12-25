@@ -1,7 +1,8 @@
 
+from numpy.core.numeric import indices
 import torch
 import pytorch_lightning as pl
-from torch.utils import data
+import numpy as np
 from data_module import ClassifierInputDataset
 from os.path import dirname, abspath
 import pickle
@@ -19,6 +20,25 @@ info_test_file =  '/data_module/saved_data/embed_test_info.pickle'
 num_labels = 13
 hprams_file= '/data_module/saved_data/classifer_hprams.pickle'
 model_file= '/data_module/saved_data/classifier.ckpt'
+
+def text_permute(x: torch.Tensor, permute_amount: float, text_length: int, sequence_length: int):
+    total_sequences = int ( text_length / sequence_length)
+    num_sequences = int (total_sequences * permute_amount)
+    padding = text_length - total_sequences * sequence_length
+    if padding != 0:
+        padding = sequence_length - padding
+        x = torch.cat((x, torch.zeros(x.shape[0], padding, x.shape[2]).cuda()), dim= 1)
+        total_sequences +=1
+        
+    x = x.reshape(x.shape[0], total_sequences, sequence_length, x.shape[2])
+    indices1 = np.random.choice(total_sequences, num_sequences ,replace= False)
+    indices0 = np.sort(indices1)
+    x[:,indices0,:,:] = x[:,indices1,:,:]
+    x = x.reshape(x.shape[0], total_sequences * sequence_length, x.shape[-1])
+    if padding != 0:
+        x = x[:, : text_length, :]
+    return x
+    
 
 class Classifier():
     def __init__(self,
@@ -137,17 +157,31 @@ class Classifier():
         else:
             self.trainer = pl.Trainer(gpus = gpus, max_epochs= epochs, weights_summary=None, log_every_n_steps= 1, num_sanity_val_steps=0)
     
-    def fit(self, epochs:int= 5, train_batch_size: int= 256, eval_batch_size: int = 256, valid_split:float = 0.2, datasets:list = None):
+    def fit(self,
+            epochs:int= 5,
+            train_batch_size: int= 256,
+            eval_batch_size: int = 256,
+            valid_split:float = 0.2,
+            datasets:list = None,
+            permute_amount: float = 0.3,
+            sequence_length: int = 8,
+            permute_rate: float = 0.3,
+            ):
         self.epochs = epochs
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
         self.valid_split = valid_split
-        self.setup_train_data(self.valid_split, index= 0)
+        if datasets:
+            self.setup_train_data(self.valid_split, index = datasets[0] - 1)
+        else:
+            self.setup_train_data(self.valid_split, index= 0)
         self.setup_trainer(self.gpus, self.epochs)
         if self.model_set_upped == False:
                     self.setup_model()
                     self.model_set_upped = True
                     print(self)
+                    
+        self.classifier.permute_config(permute_amount= permute_amount, sequence_length= sequence_length, permute_rate= permute_rate)
         self.classifier.train()
         if self.use_lr_finder:
             
@@ -157,18 +191,16 @@ class Classifier():
         
         inputs = datasets if datasets else range(self.num_train_datasets)
         for i in inputs:
-            if i !=0:
-                if datasets:
-                    i-=1
-                    if i == 0:
-                        self.trainer.fit(
-                            model= self.classifier,
-                            train_dataloaders= self.train_data_loader,
-                            val_dataloaders= self.valid_data_loader,
-                        )
-                        continue
-                self.setup_train_data(self.valid_split, index= i)
-                self.setup_trainer(self.gpus, self.epochs)
+            update_data = False
+            if datasets:
+                if i!= inputs[0]:
+                    update_data = True
+            else:
+                if i!= 0:
+                    update_data = True
+            if update_data:
+                self.setup_model(valid_split= self.valid_split, index = i - 1)
+                self.setup_trainer
         
             self.trainer.fit(
                 model= self.classifier,
@@ -332,6 +364,9 @@ class SimpleClassifier(pl.LightningModule):
         self.embedding_dim = embedding_dim
         self.lr = lr
         self.eps = eps
+        self.permute_amount: float
+        self.sequnece_length: int
+        self.permute_rate: float
     
     @property
     def num_params(self):
@@ -350,10 +385,17 @@ class SimpleClassifier(pl.LightningModule):
         inp = self.fc(inp)
         return inp
     
+    def permute_config(self, permute_amount:float, sequence_length: int, permute_rate: float):
+        self.permute_amount = permute_amount
+        self.sequnece_length = sequence_length 
+        self.permute_rate = permute_rate
     
     def training_step(self, batch, batchidx):
         texts, labels = batch
         onehot = one_hot(labels, num_labels).type(torch.float)
+        if self.permute_amount and self.permute_amount != 0:
+            if torch.rand(1).item() < self.permute_rate:
+                texts = text_permute(texts, self.permute_amount, text_length= texts.shape[1], sequence_length= self.sequnece_length)
         pred = self(texts)
         
         loss = cross_entropy(pred, onehot)
