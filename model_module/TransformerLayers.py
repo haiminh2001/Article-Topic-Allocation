@@ -40,7 +40,7 @@ class MultiHeadAttention(nn.Module):
         self.wq = nn.ModuleList([nn.Linear(embedding_dim, embedding_dim) for i in range(num_heads)])
         self.wk = nn.ModuleList([nn.Linear(embedding_dim, embedding_dim) for i in range(num_heads)])
         self.wv = nn.ModuleList([nn.Linear(embedding_dim, embedding_dim) for i in range(num_heads)])
-        self.softmax = nn.Softmax(dim = 1)
+        self.softmax = nn.Softmax(dim = 2)
         self.sqrt_dim = math.sqrt(embedding_dim)
         self.w0 = nn.Sequential(
             nn.Dropout(p= dropout),

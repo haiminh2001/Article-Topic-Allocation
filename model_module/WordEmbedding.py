@@ -285,7 +285,7 @@ class WordEmbedder():
             if i != 0:
                 self.setup_trainer(gpus= self.gpus, epochs = epochs)
                 self.setup_data(texts= texts, batch_size= batch_size, num_workers= num_workers, pin_memory= pin_memory, dataset_splits= dataset_splits, split_index= self.count)
-           
+            
             #fit        
             self.trainer.fit(
                 model= self.model,
