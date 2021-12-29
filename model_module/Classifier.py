@@ -447,7 +447,7 @@ class SimpleClassifier(pl.LightningModule):
         return optimizer
     
     def validation_step(self, batch, batchidx):
-        return self.training_step(batch, batchidx)
+        return self.test_step(batch, batchidx)
     
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
