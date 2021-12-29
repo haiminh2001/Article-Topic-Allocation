@@ -1,5 +1,4 @@
 
-from numpy.core.numeric import indices
 import torch
 import pytorch_lightning as pl
 import numpy as np
@@ -12,6 +11,7 @@ from torch import nn
 from torch.nn.functional import one_hot, cross_entropy
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 from transformers import BertModel, BertConfig
+from .TransformerLayers import MultiHeadAttention
 
 dir_path = dirname(dirname(abspath(__file__)))
 tensors_folder = '/data_module/saved_data/temp_tensors'
@@ -273,9 +273,10 @@ class Classifier():
         
     def __str__(self):
         if self.model_set_upped:
-            cnn, lstm, fc, total = self.classifier.num_params
+            cnn, lstm, fc, attention, total = self.classifier.num_params
             info = 'Weights summary\n==========================================\n'
             info += f'CNN Blocks: {(cnn/1e6):.1f} M\n'
+            info += f'Attention Layer: {(attention /1e6):.1f} M\n'
             info += f'Lstm Layers: {(lstm /1e6):.1f} M\n'
             info += f'Fully connected: {(fc /1e3):.1f} K\n'
             info += '==========================================\n'
@@ -354,7 +355,7 @@ class SimpleClassifier(pl.LightningModule):
             DenseBlock(buffer1),
             ReductionBlock(buffer1),
         )
-        
+        self.attention = MultiHeadAttention(embedding_dim= buffer2, num_heads= 12)
         self.lstm1 = nn.LSTM(input_size=buffer2, hidden_size = 768, batch_first=True, dropout= 0.1, num_layers= 3)
         self.fc = nn.Sequential(
             nn.Dropout(0.1),
@@ -372,14 +373,16 @@ class SimpleClassifier(pl.LightningModule):
     def num_params(self):
         cnn_params = sum(p.numel() for p in self.cnn.parameters() if p.requires_grad) 
         lstm_params = sum(p.numel() for p in self.lstm1.parameters() if p.requires_grad)
+        attention_params = sum(p.numel() for p in self.attention.parameters() if p.requires_grad)
         fc_params = sum(p.numel() for p in self.fc.parameters() if p.requires_grad) 
-        total_params = cnn_params + lstm_params + fc_params
-        return cnn_params, lstm_params, fc_params, total_params
+        total_params = cnn_params + lstm_params + fc_params + attention_params
+        return cnn_params, lstm_params, fc_params, attention_params, total_params
     
     def forward(self, x):
         inp = torch.moveaxis(x, 1, 2)
         inp = self.cnn(inp)
         inp = torch.moveaxis(inp, 1, 2)
+        inp = self.attention(inp)
         _, (_,inp) = self.lstm1(inp)
         inp = torch.mean(inp, dim= 0).squeeze()
         inp = self.fc(inp)
