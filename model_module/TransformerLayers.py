@@ -68,7 +68,6 @@ class MultiHeadAttention(nn.Module):
         
         #standardize by performing softmax
         value_tensor = self.softmax(value_tensor)
-        print(value_tensor)
         #calculate output
         value_tensor = torch.matmul(value_tensor, Vs) / self.sqrt_dim
         
