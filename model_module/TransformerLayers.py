@@ -5,18 +5,19 @@ import math
 class PositionalEncoding(nn.Module):
     def __init__(self, embedding_dim: int, max_sequence_length:int, dropout: float = 0.1, **kwargs):
         super(PositionalEncoding, self).__init__()
-        self.dropout = nn.Dropout(p = dropout)
-        #create postion vector and add unsqueeze to perform vector product later on
+        self.dropout = nn.Dropout(p=dropout)
+
         position = torch.arange(max_sequence_length).unsqueeze(1)
-        
-        #create post_term represent the product inside cosine, step = 2 because of dividing into 2 parts: 2i and 2i + 1
-        self.exponential = -math.log(10000) / embedding_dim
-        pos_term = torch.exp(torch.arange(0, embedding_dim, 2) * self.exponential)
-        
-        #pe shape [1, max_sequence_length, embedding_dim]
-        pe = torch.zeros(max_sequence_length, embedding_dim)
-        pe[:, 0::2] = torch.sin(pos_term * position)
-        pe[:, 1::2] = torch.cos(pos_term * position)
+        div_term = torch.exp(torch.arange(0, embedding_dim, 2) * (-math.log(10000.0) / embedding_dim))
+        div_term1 = torch.exp(torch.arange(1, embedding_dim, 2) * (-math.log(10000.0) / embedding_dim))
+        pe = torch.zeros(1, max_sequence_length, embedding_dim)
+        pe[0, :, 0::2] = torch.sin(position * div_term)
+        try:
+            pe[0, :, 1::2] = torch.cos(position * div_term1)
+        except:
+            print('ola')
+            print(position.shape, div_term.shape, div_term1.shape)
+        self.register_buffer('pe', pe)
         
         #add to buffer, since no backward requires
         self.register_buffer('pe', pe)
