@@ -188,7 +188,7 @@ class Classifier():
                     self.model_set_upped = True
                     print(self)
                     
-        self.classifier.permute_config(permute_amount= permute_amount, sequence_length= sequence_length, permute_rate= permute_rate, rotation_rate = rotation_rate)
+        self.classifier.noise_config(permute_amount= permute_amount, sequence_length= sequence_length, permute_rate= permute_rate, rotation_rate = rotation_rate)
         self.classifier.train()
         if self.use_lr_finder:
             
@@ -392,7 +392,7 @@ class SimpleClassifier(pl.LightningModule):
         inp = self.fc(inp)
         return inp
     
-    def permute_config(self, permute_amount:float, sequence_length: int, permute_rate: float, rotation_rate: float = 0.3):
+    def noise_config(self, permute_amount:float, sequence_length: int, permute_rate: float, rotation_rate: float = 0.3):
         self.permute_amount = permute_amount
         self.sequnece_length = sequence_length 
         self.permute_rate = permute_rate
