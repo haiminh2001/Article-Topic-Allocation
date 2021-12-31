@@ -175,13 +175,13 @@ class Classifier():
             rotation_rate: float = 0.1,
             lr: float = 1e-5,
             eps: float = 1e-9,
+            dropout: float = 0.1,
+            weight_decay: float = 1e-5,
             ):
         self.epochs = epochs
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
         self.valid_split = valid_split
-        self.classifier.lr = lr
-        self.classifier.eps = eps
         if datasets:
             self.setup_train_data(self.valid_split, index = datasets[0] - 1)
         else:
@@ -191,7 +191,8 @@ class Classifier():
                     self.setup_model()
                     self.model_set_upped = True
                     print(self)
-                    
+        
+        self.classifier.optimize_cfg(lr, eps, weight_decay)
         self.classifier.noise_config(permute_amount= permute_amount, sequence_length= sequence_length, permute_rate= permute_rate, rotation_rate = rotation_rate)
         self.classifier.train()
         if self.use_lr_finder:
@@ -387,6 +388,11 @@ class SimpleClassifier(pl.LightningModule):
         total_params = cnn_params + lstm_params + fc_params
         return cnn_params, lstm_params, fc_params, total_params
     
+    def optimize_cfg(self, lr, eps, weight_decay):
+        self.lr = lr
+        self.eps = eps
+        self.weight_decay = weight_decay
+    
     def forward(self, x):
         inp = torch.moveaxis(x, 1, 2)
         inp = self.cnn(inp)
@@ -455,6 +461,7 @@ class SimpleClassifier(pl.LightningModule):
             self.parameters(),
             lr= self.lr,
             eps= self.eps,
+            weight_decay= self.weight_decay,
         )
         return optimizer
     
@@ -524,6 +531,7 @@ class Bert(pl.LightningModule):
             self.parameters(),
             lr= self.lr,
             eps= self.eps,
+            weight_decay= self.weight_decay,
         )
         return optimizer
     
