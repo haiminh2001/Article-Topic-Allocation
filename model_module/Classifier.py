@@ -206,8 +206,8 @@ class Classifier():
                 if i!= 0:
                     update_data = True
             if update_data:
-                self.setup_model(valid_split= self.valid_split, index = i - 1)
-                self.setup_trainer
+                self.setup_model()
+                self.classifier.current_epoch = 0
         
             self.trainer.fit(
                 model= self.classifier,
