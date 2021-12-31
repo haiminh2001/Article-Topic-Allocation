@@ -42,7 +42,6 @@ def text_permute(x: torch.Tensor, permute_amount: float, text_length: int, seque
 def text_rotation(x: torch.Tensor):
     text_length = x.shape[1]
     pivot = torch.randint(low = 0, high =text_length, size = (1, )).item()
-    print(pivot)
     x = torch.cat((x[:, pivot : , :], x[: , : pivot, :]), dim = 1)
     return x
   
