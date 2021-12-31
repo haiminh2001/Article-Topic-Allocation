@@ -206,8 +206,8 @@ class Classifier():
                 if i!= 0:
                     update_data = True
             if update_data:
-                self.setup_train_data(valid_split= self.valid_split, index= i + 1)
-                self.setup_trainer(gpus= self.gpus, epochs= self.epochs)
+                self.setup_train_data(valid_split= self.valid_split, index = i - 1)
+                self.setup_trainer(self.gpus, self.epochs)
         
             self.trainer.fit(
                 model= self.classifier,
