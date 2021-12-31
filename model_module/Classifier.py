@@ -173,11 +173,15 @@ class Classifier():
             sequence_length: int = 8,
             permute_rate: float = 0.3,
             rotation_rate: float = 0.1,
+            lr: float = 1e-5,
+            eps: float = 1e-9,
             ):
         self.epochs = epochs
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
         self.valid_split = valid_split
+        self.classifier.lr = lr
+        self.classifier.eps = eps
         if datasets:
             self.setup_train_data(self.valid_split, index = datasets[0] - 1)
         else:
