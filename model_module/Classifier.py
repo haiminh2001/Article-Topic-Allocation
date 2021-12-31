@@ -38,7 +38,14 @@ def text_permute(x: torch.Tensor, permute_amount: float, text_length: int, seque
     if padding != 0:
         x = x[:, : text_length, :]
     return x
-    
+
+def text_rotation(x: torch.Tensor):
+    text_length = x.shape[1]
+    pivot = torch.randint(low = 0, high =text_length, size = (1, )).item()
+    print(pivot)
+    x = torch.cat((x[:, pivot : , :], x[: , : pivot, :]), dim = 1)
+    return x
+  
 
 class Classifier():
     def __init__(self,
@@ -166,6 +173,7 @@ class Classifier():
             permute_amount: float = 0.3,
             sequence_length: int = 8,
             permute_rate: float = 0.3,
+            rotation_rate: float = 0.1,
             ):
         self.epochs = epochs
         self.train_batch_size = train_batch_size
@@ -181,7 +189,7 @@ class Classifier():
                     self.model_set_upped = True
                     print(self)
                     
-        self.classifier.permute_config(permute_amount= permute_amount, sequence_length= sequence_length, permute_rate= permute_rate)
+        self.classifier.permute_config(permute_amount= permute_amount, sequence_length= sequence_length, permute_rate= permute_rate, rotation_rate = rotation_rate)
         self.classifier.train()
         if self.use_lr_finder:
             
@@ -385,10 +393,11 @@ class SimpleClassifier(pl.LightningModule):
         inp = self.fc(inp)
         return inp
     
-    def permute_config(self, permute_amount:float, sequence_length: int, permute_rate: float):
+    def permute_config(self, permute_amount:float, sequence_length: int, permute_rate: float, rotation_rate: float = 0.3):
         self.permute_amount = permute_amount
         self.sequnece_length = sequence_length 
         self.permute_rate = permute_rate
+        self.rotation_rate = rotation_rate
     
     def training_step(self, batch, batchidx):
         texts, labels = batch
@@ -396,6 +405,9 @@ class SimpleClassifier(pl.LightningModule):
         if self.permute_amount and self.permute_amount != 0:
             if torch.rand(1).item() < self.permute_rate:
                 texts = text_permute(texts, self.permute_amount, text_length= texts.shape[1], sequence_length= self.sequnece_length)
+        if self.rotaion_rate !=0:
+            if torch.rand(1).item() < self.rotation_rate:
+                texts = text_rotation(texts)
         pred = self(texts)
         
         loss = cross_entropy(pred, onehot)
