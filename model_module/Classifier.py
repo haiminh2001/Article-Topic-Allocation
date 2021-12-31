@@ -405,7 +405,7 @@ class SimpleClassifier(pl.LightningModule):
         if self.permute_amount and self.permute_amount != 0:
             if torch.rand(1).item() < self.permute_rate:
                 texts = text_permute(texts, self.permute_amount, text_length= texts.shape[1], sequence_length= self.sequnece_length)
-        if self.rotaion_rate !=0:
+        if self.rotation_rate !=0:
             if torch.rand(1).item() < self.rotation_rate:
                 texts = text_rotation(texts)
         pred = self(texts)
