@@ -321,13 +321,13 @@ class WordEmbedder():
             lr = kwargs['lr']
             eps = kwargs['eps']
             window_size = kwargs['window_size']
-            hiden_target_rate = kwargs['hide_target_rate']
+            hide_target_rate = kwargs['hide_target_rate']
             num_heads = kwargs['num_heads']
             dropout = kwargs['dropout']
             embedding_dim = kwargs['embedding_dim']
             self.max_vocab_length = max_vocab_length
             self.window_size = window_size
-            self.model =  WordEmbeddingModel.load_from_checkpoint(dir_path + model_file, max_vocab_length= max_vocab_length, lr= lr, eps= eps, window_size = window_size, hiden_target_rate= hiden_target_rate, num_heads= num_heads, dropout= dropout, embedding_dim= embedding_dim)
+            self.model =  WordEmbeddingModel.load_from_checkpoint(dir_path + model_file, max_vocab_length= max_vocab_length, lr= lr, eps= eps, window_size = window_size, hide_target_rate= hide_target_rate, num_heads= num_heads, dropout= dropout, embedding_dim= embedding_dim)
         else:
             print('No embedder found')
         
