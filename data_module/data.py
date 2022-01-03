@@ -15,11 +15,11 @@ def standardize(df: pd.DataFrame):
 
 path = os.path.dirname(os.path.abspath(__file__))
 class DataHolder(ABC):
-    def __init__(self, data_folder: str = '/articles_csv'):
+    def __init__(self, data_folder: str = '/articles_csv', if_preprocess: bool = True):
         self.data_folder = path + data_folder
-        self.read_csv()
+        self.read_csv(if_preprocess)
     
-    def read_csv(self):
+    def read_csv(self, if_preprocess):
         self.data = {}
         self.data['train'] = {'texts': [], 'labels': []}
         self.data['train'] = pd.DataFrame(self.data['train'])
@@ -38,9 +38,10 @@ class DataHolder(ABC):
         
         # shuffle the DataFrame rows
         self.data['train'] = self.data['train'].sample(frac = 1)    
-        self.data['test'] = self.data['test'].sample(frac = 1)    
-        standardize(self.data['train'])
-        standardize(self.data['test'])
+        self.data['test'] = self.data['test'].sample(frac = 1)
+        if if_preprocess == True:    
+          standardize(self.data['train'])
+          standardize(self.data['test'])
                 
     @property
     def train_texts(self):

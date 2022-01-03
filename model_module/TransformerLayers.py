@@ -35,16 +35,18 @@ class PositionalEncoding(nn.Module):
         return sequence
     
 class MultiHeadAttention(nn.Module):
-    def __init__(self, embedding_dim: int, num_heads: int = 3, dropout: float = 0.1):
+    def __init__(self, embedding_dim: int, out_dim:int = None, num_heads: int = 3, dropout: float = 0.1):
         super(MultiHeadAttention, self).__init__()
-        self.wq = nn.ModuleList([nn.Linear(embedding_dim, embedding_dim) for i in range(num_heads)])
-        self.wk = nn.ModuleList([nn.Linear(embedding_dim, embedding_dim) for i in range(num_heads)])
-        self.wv = nn.ModuleList([nn.Linear(embedding_dim, embedding_dim) for i in range(num_heads)])
-        self.softmax = nn.Softmax(dim = 2)
-        self.sqrt_dim = math.sqrt(embedding_dim)
+        if out_dim == None:
+            out_dim = embedding_dim
+        self.wq = nn.ModuleList([nn.Linear(embedding_dim, out_dim) for i in range(num_heads)])
+        self.wk = nn.ModuleList([nn.Linear(embedding_dim, out_dim) for i in range(num_heads)])
+        self.wv = nn.ModuleList([nn.Linear(embedding_dim, out_dim) for i in range(num_heads)])
+        self.softmax = nn.Softmax(dim = -2)
+        self.sqrt_dim = math.sqrt(out_dim)
         self.w0 = nn.Sequential(
             nn.Dropout(p= dropout),
-            nn.Linear(embedding_dim * num_heads, embedding_dim),
+            nn.Linear(out_dim * num_heads, out_dim),
             nn.ReLU(),
         )
         
