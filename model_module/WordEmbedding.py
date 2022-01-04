@@ -34,7 +34,7 @@ tensors_folder = '/data_module/saved_data/temp_tensors'
 class Encoder(nn.Module):
     def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1, hide_target_rate: float = 0.5  ,**kwargs):
         super(Encoder, self).__init__()
-        self.embedding = nn.Embedding(max_vocab_length, embedding_dim)        
+        self.embedding = nn.Embedding(max_vocab_length, embedding_dim, padding_idx= 0)        
         self.pe = PositionalEncoding(embedding_dim, sequence_length) 
         self.mha = MultiHeadAttention(embedding_dim, num_heads= num_heads)
         self.fc = nn.Sequential(
