@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 from data_module import VocabBuilder, EmbedDataset, InferenceDataset
 from .TransformerLayers import PositionalEncoding, MultiHeadAttention
 from pytorch_lightning import Trainer
-from torch.optim import Adam
+from torch.optim import SparseAdam, Adam
 from torch.nn import functional as F 
 from torch.utils.data import DataLoader
 from os.path import dirname, abspath
@@ -14,7 +14,7 @@ import time
 import pickle
 import os
 import glob
-from sklearn.metrics import accuracy_score
+import numpy as np
 
 def remove_file_in_folders(folder_path:str, spare:str = 'train'):
     files = glob.glob(folder_path + '/*')
@@ -31,10 +31,20 @@ train_info_file = '/data_module/saved_data/embed_train_info.pickle'
 test_info_file = '/data_module/saved_data/embed_test_info.pickle'
 tensors_folder = '/data_module/saved_data/temp_tensors'
 
+def hide_context(x:torch.Tensor):
+    size = np.random.randint(low = 2, high = x.shape[1] - 2)
+    hide = np.random.permutation(np.arange(x.shape[1]))
+    hide, not_hide = hide[:size], hide[size:]
+    x1 = torch.clone(x)
+    x1[:, hide, :] = torch.zeros_like(x1[:, hide, :])
+    x[:, not_hide,:]  = torch.zeros_like(x[:, not_hide, :])
+    return x, x1
+
+    
 class Encoder(nn.Module):
-    def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1, hide_target_rate: float = 0.5  ,**kwargs):
+    def __init__(self, max_vocab_length: int, num_heads = 3, sequence_length: int = 4, embedding_dim: int = 100, dropout: float = 0.1  ,**kwargs):
         super(Encoder, self).__init__()
-        self.embedding = nn.Embedding(max_vocab_length, embedding_dim, padding_idx= 0)        
+        self.embedding = nn.Embedding(max_vocab_length, embedding_dim, padding_idx= 0, sparse= True)        
         self.pe = PositionalEncoding(embedding_dim, sequence_length) 
         self.mha = MultiHeadAttention(embedding_dim, num_heads= num_heads)
         self.fc = nn.Sequential(
@@ -47,15 +57,12 @@ class Encoder(nn.Module):
             nn.ReLU(),
             nn.Dropout(p= dropout),
         )
-        self.hide_target_rate = hide_target_rate
-        self.save_hide_target_rate = hide_target_rate
+      
         
     def eval_mode(self):
-        self.hide_target_rate = 0
         self.eval()
     
     def train_mode(self):
-        self.hide_target_rate = self.save_hide_target_rate
         self.train()
     
     
@@ -71,14 +78,7 @@ class Encoder(nn.Module):
         """
         #dim reduction
         x01 = self.embedding(x0).squeeze()
-        
-        #hide target or not
-        hide = torch.rand(1)[0]
-        if (hide < self.hide_target_rate):
-            x1 = torch.zeros(x.shape[0], x01.shape[-1]).cuda()
-        else:
-            x1 = self.embedding(x).squeeze()
-        
+            
         #add positional encoding
         x01 = self.pe(x01)
 
@@ -87,9 +87,6 @@ class Encoder(nn.Module):
         
         #combine all context words into 1 vector
         z1 = self.combine(torch.transpose(z1, 1, 2)).squeeze()
-
-        #add and normalize
-        z1 = F.normalize(z1 + x1, dim= 1)
         
         #feadforwad
         z2 = self.fc(z1)
@@ -100,25 +97,32 @@ class Encoder(nn.Module):
         
 
 class TargetLearner(nn.Module):
-    def __init__(self,max_vocab_length:int, embedding_dim:int, **kwargs):
+    def __init__(self,max_vocab_length:int, embedding_dim:int, hide_target_rate: float = 0.5, **kwargs):
         super(TargetLearner, self).__init__()
-        self.embedding = nn.Embedding(max_vocab_length, embedding_dim= embedding_dim)
+        self.hide_target_rate = hide_target_rate
+        self.embedding = nn.Embedding(max_vocab_length, embedding_dim= embedding_dim,sparse= True, padding_idx= 0)
     
     def forward(self, encoded: torch.Tensor) -> torch.Tensor:
-    
-        return self.embedding(encoded).squeeze()
+        hide = torch.rand(1)[0]
+        if (hide < self.hide_target_rate):
+            encoded = torch.zeros(encoded.shape[0], encoded.shape[-1]).cuda().squeeze()
+        else:
+            encoded = self.embedding(encoded).squeeze()
+        return encoded
 
 
 class ContextLearner(nn.Module):
     def __init__(self,max_vocab_length:int, embedding_dim:int, sequence_length:int, **kwargs):
         super(ContextLearner, self).__init__()
         self.combine = nn.Sequential(
-                        nn.Linear(sequence_length, 1),
+                        nn.Linear(sequence_length - 1, 1),
                         nn.ReLU(),
                         ) 
-        self.embedding = nn.Embedding(max_vocab_length, embedding_dim= embedding_dim)
+        self.idx = int(sequence_length / 2)
+        self.embedding = nn.Embedding(max_vocab_length, embedding_dim= embedding_dim,sparse= True, padding_idx= 0)
     
     def forward(self, encoded: torch.Tensor) -> torch.Tensor:
+        encoded = torch.cat( (encoded[:, : self.idx, :], encoded[:, self.idx + 1 :, :]), dim = 1)
         encoded = self.embedding(encoded).squeeze()
         return self.combine(torch.transpose(encoded, 1 , 2)).squeeze()
 
@@ -127,9 +131,9 @@ class WordEmbeddingModel(pl.LightningModule):
         super(WordEmbeddingModel, self).__init__()
         self.lr = lr
         self.eps = eps
-        self.encode = Encoder(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, sequence_length= 2 * window_size + 1, dropout= dropout, hide_target_rate = hide_target_rate)
-        self.context_learner = ContextLearner(embedding_dim= embedding_dim, max_vocab_length= max_vocab_length, sequence_length= 2 * window_size)
-        self.target_learner = TargetLearner(embedding_dim= embedding_dim, max_vocab_length= max_vocab_length)
+        self.encode = Encoder(max_vocab_length= max_vocab_length, embedding_dim= embedding_dim, num_heads= num_heads, sequence_length= 2 * window_size + 1, dropout= dropout)
+        self.context_learner = ContextLearner(embedding_dim= embedding_dim, max_vocab_length= max_vocab_length, sequence_length= 2 * window_size + 1)
+        self.target_learner = TargetLearner(embedding_dim= embedding_dim, max_vocab_length= max_vocab_length, hide_target_rate = hide_target_rate)
         self.max_vocab_length = max_vocab_length
         self.window_size = window_size
         self.target = torch.Tensor([1]).cuda()
@@ -148,19 +152,25 @@ class WordEmbeddingModel(pl.LightningModule):
         return out
        
     
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch, batch_idx, optimizer_idx):
         contexts, targets = batch
-        out = self.encode(targets, contexts)
-        embedded_context = self.context_learner(torch.cat((contexts[:, : self.window_size, : ], contexts[: , self.window_size + 1 : , :]), dim = 1))
+        ct1, ct2 = hide_context(contexts)
+        out = self.encode(targets, ct1)
+        embedded_context = self.context_learner(ct2)
         embedded_target = self.target_learner(targets)
         loss1 = F.cosine_embedding_loss(out, embedded_context, self.target)
         loss2 = F.cosine_embedding_loss(out, embedded_target, self.target)
-        loss = loss1 * loss2 * 2 / (loss1 + loss2)
+        loss3 = F.cosine_embedding_loss(out, out[torch.randperm(out.shape[0])], torch.Tensor([-1]).cuda())
+        loss3 = - F.mse_loss(out, out[torch.randperm(out.shape[0])])
+        loss = loss1 + loss2 + loss3
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return {'loss': loss}
     
     def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
+        output = []
+        for x in outputs:
+            output = output + x
+        avg_loss = torch.stack([x["loss"] for x in output]).mean()
         print('Epochs {}: loss: {}'.format(self.current_epoch, avg_loss))
         
     @property
@@ -176,23 +186,47 @@ class WordEmbeddingModel(pl.LightningModule):
         optimizer_grouped_parameters = [
             {
                 "params": p
-                    for p in self.encode.parameters()
+                    for p in self.encode.embedding.parameters()
             },
             {
                 "params": p
-                    for p in self.context_learner.parameters()
+                    for p in self.context_learner.embedding.parameters()
             },
             {
                 "params": p
-                    for p in self.target_learner.parameters()
+                    for p in self.target_learner.embedding.parameters()
             },
         ]
-        optimizer = Adam(
+        optimizer = SparseAdam(
             optimizer_grouped_parameters,
             lr= self.lr,
             eps= self.eps,
         )
-        return optimizer
+        optimizer_grouped_parameters1 = [
+            {
+                "params": p
+                    for p in self.encode.mha.parameters() 
+            },
+            {
+                "params": p
+                    for p in self.encode.fc.parameters() 
+            },
+            {
+                "params": p
+                    for p in self.encode.combine.parameters() 
+            },
+            {
+                "params": p
+                    for p in self.context_learner.combine.parameters() 
+            },
+            
+        ]
+        optimizer1 = Adam(
+            optimizer_grouped_parameters1,
+            lr= self.lr,
+            eps= self.eps,
+        )
+        return optimizer1, optimizer
 
 class WordEmbedder():
     def __init__(

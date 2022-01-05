@@ -10,7 +10,7 @@ class PositionalEncoding(nn.Module):
         position = torch.arange(max_sequence_length).unsqueeze(1)
         
         #create post_term represent the product inside cosine, step = 2 because of dividing into 2 parts: 2i and 2i + 1
-        self.exponential = -math.log(10000) / embedding_dim
+        self.exponential = -math.log(1000) / embedding_dim
         pos_term = torch.exp(torch.arange(0, embedding_dim, 2) * self.exponential)
         
         #pe shape [1, max_sequence_length, embedding_dim]

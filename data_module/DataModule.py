@@ -47,6 +47,8 @@ class EmbedDataset(Dataset):
                         words.append(w)
             for i in range (window_size, len(words) - window_size):
                 end = min(i + window_size + 1, len(words))
+                if vocab_builder.get(words[i] == 0):
+                    continue
                 self.contexts.append(self.transform(words[i - window_size : end]))
                 self.targets.append(torch.Tensor([self.vocab_builder.get(words[i], self.max_vocab_length)]).type(torch.long))
 
