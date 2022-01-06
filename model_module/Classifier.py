@@ -342,7 +342,7 @@ class ReductionBlock(nn.Module):
             nn.ReLU(),
             nn.Conv1d(input_size,int( input_size / 2), kernel_size= 1, stride= 1),
         )
-        self.pooling = nn.AvgPool1d(2)
+        self.pooling = nn.AvgPool1d(kernel_size = 2, stride = 2)
     
     def forward(self, x):
         x1 = self.cnn1(x)

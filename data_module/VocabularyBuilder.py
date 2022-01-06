@@ -46,7 +46,7 @@ class VocabBuilder:
         
         occasional_words = []
         for word in self.vocab.keys():
-            if self.vocab[word]['df'] < 5:
+            if self.vocab[word]['df'] < 10:
                 occasional_words.append(word)
             else:
                 self.vocab[word] = self.vocab[word]['tf']
